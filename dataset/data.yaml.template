@@ -1,0 +1,19 @@
+# YOLO 植物数据集配置模板
+# 当你从 Roboflow 或其他网站下载完 YOLO 格式的数据集后，可按如下格式填写：
+
+# 数据集根目录 (绝对路径或相对于项目根目录的相对路径)
+path: D:/AI/yolozhiwu/dataset
+
+# 训练集、验证集、测试集图片路径
+train: images/train
+val: images/val
+test: images/test   # 可选
+
+# 类别数量与名称
+nc: 5
+names:
+  0: Rose           # 玫瑰/月季
+  1: Sunflower      # 向日葵
+  2: Tulip          # 郁金香
+  3: Monstera       # 龟背竹
+  4: Succulent      # 多肉植物

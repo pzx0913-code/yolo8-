@@ -1,0 +1,33 @@
+# Python 编译与缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# 训练日志与权重缓存 (避免体积过大)
+runs/
+*.pt.cache
+
+# 数据集中的大图文件 (保留配置模板即可)
+dataset/images/
+dataset/labels/
+*.zip
+*.tar.gz
+
+# 测试临时图片
+bus.jpg
+output_result.jpg
+plant_result.jpg
+
+# 虚拟环境与本地配置
+venv/
+env/
+.venv/
+plant_yolo_env/
+.env
+
+# IDE 与操作系统残留
+.DS_Store
+Thumbs.db
+*.swp

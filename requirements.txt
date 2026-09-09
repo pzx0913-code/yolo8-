@@ -1,0 +1,8 @@
+torch>=2.0.0
+torchvision>=0.15.0
+ultralytics>=8.0.0
+opencv-python>=4.8.0
+PySide6>=6.5.0
+matplotlib>=3.7.0
+pandas>=2.0.0
+pyyaml>=6.0.0

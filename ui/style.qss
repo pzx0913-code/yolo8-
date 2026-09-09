@@ -1,0 +1,274 @@
+/* 现代化专业级 UI 样式表 (Slate-900 & Emerald 主题) */
+
+* {
+    font-family: "Segoe UI", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+    outline: none;
+}
+
+QMainWindow, QWidget#centralWidget {
+    background-color: #0B0F19;
+    color: #F1F5F9;
+}
+
+/* 顶部一体化导航条 */
+QFrame#headerBar {
+    background-color: #111827;
+    border: 1px solid #1F2937;
+    border-radius: 8px;
+    padding: 2px 10px;
+}
+
+QLabel#appTitle {
+    font-size: 16px;
+    font-weight: 700;
+    color: #10B981;
+}
+
+QLabel#badgeVersion {
+    background-color: #064E3B;
+    color: #6EE7B7;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-top: 1px;
+}
+
+/* 顶部状态徽章群 */
+QLabel#badgeGpu {
+    background-color: #064E3B;
+    color: #34D399;
+    font-weight: 600;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #059669;
+}
+
+QLabel#badgeModel {
+    background-color: #1F2937;
+    color: #9CA3AF;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #374151;
+}
+
+QLabel#badgePerf {
+    background-color: #1E1B4B;
+    color: #A5B4FC;
+    font-weight: 600;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #4338CA;
+}
+
+/* 左右拖动分割条 */
+QSplitter::handle:horizontal {
+    background-color: #1E293B;
+    width: 5px;
+    margin: 2px;
+    border-radius: 2px;
+}
+
+QSplitter::handle:horizontal:hover {
+    background-color: #10B981;
+}
+
+/* 通用卡片容器 */
+QGroupBox {
+    background-color: #111827;
+    border: 1px solid #1F2937;
+    border-radius: 8px;
+    margin-top: 12px;
+    padding: 12px 10px 10px 10px;
+    font-weight: 700;
+    color: #E2E8F0;
+    font-size: 13px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 12px;
+    padding: 0 5px;
+    background-color: #111827;
+    color: #10B981;
+    border-radius: 4px;
+}
+
+/* 按钮样式体系 */
+QPushButton {
+    background-color: #1F2937;
+    color: #E5E7EB;
+    border: 1px solid #374151;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-weight: 600;
+    font-size: 13px;
+    min-height: 22px;
+}
+
+QPushButton:hover {
+    background-color: #374151;
+    border-color: #4B5563;
+    color: #FFFFFF;
+}
+
+QPushButton:pressed {
+    background-color: #111827;
+}
+
+/* 主要操作按钮 (翡翠绿高亮) */
+QPushButton#btnPrimary {
+    background-color: #059669;
+    border: 1px solid #10B981;
+    color: #FFFFFF;
+}
+
+QPushButton#btnPrimary:hover {
+    background-color: #10B981;
+    border-color: #34D399;
+}
+
+QPushButton#btnPrimary:pressed {
+    background-color: #047857;
+}
+
+/* 危险/停止操作按钮 (赤红) */
+QPushButton#btnDanger {
+    background-color: #DC2626;
+    border: 1px solid #EF4444;
+    color: #FFFFFF;
+}
+
+QPushButton#btnDanger:hover {
+    background-color: #EF4444;
+}
+
+QPushButton#btnDanger:pressed {
+    background-color: #B91C1C;
+}
+
+/* 次级按钮 */
+QPushButton#btnSecondary {
+    background-color: #1E293B;
+    border: 1px solid #334155;
+    color: #CBD5E1;
+}
+
+QPushButton#btnSecondary:hover {
+    background-color: #334155;
+    color: #FFFFFF;
+}
+
+/* 视窗容器卡片 */
+QFrame#canvasContainer {
+    background-color: #0F172A;
+    border: 1px solid #1E293B;
+    border-radius: 10px;
+}
+
+QLabel#lblStatus {
+    color: #64748B;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+QLabel#lblConfVal {
+    color: #10B981;
+    font-weight: 700;
+    min-width: 38px;
+    font-size: 14px;
+}
+
+/* 滑块样式 */
+QSlider::groove:horizontal {
+    height: 6px;
+    background: #1F2937;
+    border-radius: 3px;
+}
+
+QSlider::sub-page:horizontal {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #059669, stop:1 #10B981);
+    border-radius: 3px;
+}
+
+QSlider::handle:horizontal {
+    background: #34D399;
+    border: 2px solid #FFFFFF;
+    width: 16px;
+    margin-top: -5px;
+    margin-bottom: -5px;
+    border-radius: 8px;
+}
+
+QSlider::handle:horizontal:hover {
+    background: #6EE7B7;
+}
+
+/* 结果表格定制 */
+QTableWidget {
+    background-color: #0F172A;
+    border: 1px solid #1E293B;
+    border-radius: 6px;
+    gridline-color: #1E293B;
+    color: #E2E8F0;
+    selection-background-color: #064E3B;
+    selection-color: #34D399;
+}
+
+QHeaderView::section {
+    background-color: #1E293B;
+    color: #94A3B8;
+    padding: 6px 4px;
+    border: none;
+    border-right: 1px solid #0F172A;
+    border-bottom: 1px solid #0F172A;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+QTableWidget::item {
+    padding: 3px;
+}
+
+QTableWidget::item:selected {
+    background-color: #064E3B;
+    color: #34D399;
+    font-weight: 600;
+}
+
+/* 百科卡片浏览区 */
+QTextBrowser#txtWiki {
+    background-color: #0F172A;
+    border: 1px solid #1E293B;
+    border-radius: 8px;
+    padding: 12px 14px;
+    color: #E2E8F0;
+    font-size: 14px;
+}
+
+/* 现代化纤细滚动条 */
+QScrollBar:vertical {
+    border: none;
+    background: #0F172A;
+    width: 6px;
+    margin: 0px;
+}
+
+QScrollBar::handle:vertical {
+    background: #334155;
+    min-height: 20px;
+    border-radius: 3px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #475569;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
