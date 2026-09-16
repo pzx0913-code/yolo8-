@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 YOLO 植物模型一键训练脚本
-充分发挥 NVIDIA RTX 5060 Ti (16GB) 显卡算力，支持自定义数据集训练并自动输出 best_plant.pt。
+支持 GPU/CPU 硬件加速自适应，支持自定义数据集训练并自动提取输出 best_plant.pt。
 
 运行方式:
     python train.py --epochs 50 --batch 16
@@ -13,10 +13,12 @@ import argparse
 import torch
 from ultralytics import YOLO
 
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 
 def train(data_yaml="dataset/data.yaml", epochs=50, batch_size=16, base_model="weights/yolov8n.pt"):
     print("=" * 60)
-    print("🌿 开始启动 YOLO 植物识别模型训练流程")
+    print("[*] 启动 YOLO 模型训练流程")
     print("=" * 60)
 
     # 1. 检查数据配置文件
@@ -32,25 +34,26 @@ def train(data_yaml="dataset/data.yaml", epochs=50, batch_size=16, base_model="w
         print(f"[*] 显卡加速就绪: {gpu_name} (使用 CUDA:0 进行高速训练)")
     else:
         device = "cpu"
-        print("[!] 警告: 未检测到 GPU，将使用 CPU 训练（速度可能较慢）")
+        print("[!] 提示: 未检测到可用 GPU，将使用 CPU 模式进行训练")
 
     # 3. 加载基底权重
     if not os.path.exists(base_model):
-        print(f"[*] 基底模型 {base_model} 不存在，将自动下载...")
+        print(f"[*] 基底模型 {base_model} 不存在，将自动准备预训练底模...")
         base_model = "yolov8n.pt"
 
     print(f"[*] 加载基底模型: {base_model}")
     model = YOLO(base_model)
 
     # 4. 开始训练
-    print(f"[*] 训练参数: epochs={epochs}, batch={batch_size}, imgsz=640, device={device}")
+    num_workers = min(4, os.cpu_count() or 1)
+    print(f"[*] 训练参数: epochs={epochs}, batch={batch_size}, imgsz=640, device={device}, workers={num_workers}")
     results = model.train(
         data=data_yaml,
         epochs=epochs,
         batch=batch_size,
         imgsz=640,
         device=device,
-        workers=4,
+        workers=num_workers,
         project="runs/detect",
         name="plant_train",
         exist_ok=True,
@@ -62,11 +65,12 @@ def train(data_yaml="dataset/data.yaml", epochs=50, batch_size=16, base_model="w
     target_pt = os.path.join("weights", "best_plant.pt")
 
     if os.path.exists(best_pt):
+        os.makedirs("weights", exist_ok=True)
         shutil.copy(best_pt, target_pt)
         print("=" * 60)
-        print(f"[✔] 恭喜！模型训练圆满完成！")
-        print(f"[✔] 最优权重已自动同步至: {os.path.abspath(target_pt)}")
-        print(f"[✔] 软件启动时 (python app.py) 将自动加载该专属植物模型！")
+        print(f"[OK] 模型训练完成！")
+        print(f"[OK] 最优权重已同步至: {os.path.abspath(target_pt)}")
+        print(f"[OK] 软件启动时 (python app.py) 将自动优先加载该专属植物模型。")
         print("=" * 60)
         return True
     else:
@@ -78,7 +82,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="YOLO 植物模型训练")
     parser.add_argument("--data", type=str, default="dataset/data.yaml", help="数据集配置文件路径")
     parser.add_argument("--epochs", type=int, default=50, help="训练轮数 (推荐 50~100)")
-    parser.add_argument("--batch", type=int, default=16, help="Batch Size (5060Ti 16G 显存推荐 16 或 32)")
+    parser.add_argument("--batch", type=int, default=16, help="Batch Size (推荐 16 或 32)")
     parser.add_argument("--model", type=str, default="weights/yolov8n.pt", help="初始底模权重")
     args = parser.parse_args()
 

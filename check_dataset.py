@@ -11,10 +11,12 @@ import os
 import glob
 import yaml
 
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 
 def check_dataset(dataset_dir="dataset"):
     print("=" * 60)
-    print("🔍 正在检查植物数据集健康度...")
+    print("[*] 正在检查植物数据集配置与完整性...")
     print("=" * 60)
 
     if not os.path.exists(dataset_dir):
@@ -44,9 +46,9 @@ def check_dataset(dataset_dir="dataset"):
     else:
         class_names = []
 
-    print(f"[✔] 检测到 {len(class_names)} 个植物识别类别:")
+    print(f"[*] 检测到 {len(class_names)} 个目标识别类别:")
     for c in class_list:
-        print(f"    🌱 {c}")
+        print(f"    - {c}")
 
     # 检查训练集与验证集图片
     train_imgs = glob.glob(os.path.join(dataset_dir, "**", "images", "train", "*.*"), recursive=True) or \
@@ -70,7 +72,7 @@ def check_dataset(dataset_dir="dataset"):
         return False
 
     print("=" * 60)
-    print("[✔] 数据集完全达标！随时可以运行 python train.py 开启 5060Ti 高速训练！")
+    print("[OK] 数据集配置检查通过，可以启动模型训练。")
     print("=" * 60)
     return True
 

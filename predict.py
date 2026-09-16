@@ -10,6 +10,9 @@ import os
 import cv2
 from core.detector import PlantDetector
 
+# 锁定当前工作目录
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 
 def main():
     parser = argparse.ArgumentParser(description="YOLO 植物识别快速推理测试")
@@ -19,10 +22,10 @@ def main():
     args = parser.parse_args()
 
     detector = PlantDetector(args.weights)
-    annotated_frame, detections = detector.predict_image(args.source, conf=args.conf)
+    annotated_frame, detections, time_ms = detector.predict_image(args.source, conf=args.conf)
 
     print("\n" + "=" * 50)
-    print(f"[*] 检测完成，共发现 {len(detections)} 个目标:")
+    print(f"[*] 检测完成 (耗时: {time_ms:.1f} ms)，共发现 {len(detections)} 个目标:")
     for idx, det in enumerate(detections, 1):
         print(f"    [{idx}] 类别: {det['class_name']:<15} 置信度: {det['confidence']*100:.1f}%  坐标: {det['box']}")
     print("=" * 50)

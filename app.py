@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-YOLO 植物识别软件 - 应用程序启动入口
+YOLO 植物识别软件 - 桌面客户端启动入口
 运行命令:
     python app.py
 """
@@ -8,8 +8,11 @@ YOLO 植物识别软件 - 应用程序启动入口
 import sys
 import os
 
-# 将当前根目录添加到模块搜索路径
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# 锁定当前工作目录与模块导入路径
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+os.chdir(CURRENT_DIR)
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt

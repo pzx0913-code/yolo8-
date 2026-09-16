@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-YOLO 植物识别系统 - 响应式主界面 (视窗与百科排版黄金比例优化版)
-图片区域适度收敛，大幅拓宽右侧百科区域，全面放大植物百科字体与阅读舒适度。
+YOLO 植物识别系统 - 响应式主界面
+具备原生深色标题栏、平滑图像自适应缩放、多平台显卡动态适配与排版优化。
 """
 
 import sys
 import os
 import ctypes
 from ctypes import c_int, byref, sizeof
+import torch
 import cv2
 import numpy as np
 from PySide6.QtWidgets import (
@@ -118,7 +119,7 @@ class CameraWorker(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("YOLO 智能植物识别与监测系统")
+        self.setWindowTitle("YOLO 植物识别与监测系统")
         self.resize(1260, 780)
         self.setMinimumSize(980, 620)
         self.setAcceptDrops(True)
@@ -155,7 +156,7 @@ class MainWindow(QMainWindow):
 
         title_box = QHBoxLayout()
         title_box.setSpacing(8)
-        self.lbl_title = QLabel("🌿 YOLO 智能植物识别系统")
+        self.lbl_title = QLabel("YOLO 智能植物识别系统")
         self.lbl_title.setObjectName("appTitle")
         lbl_version = QLabel("v1.0")
         lbl_version.setObjectName("badgeVersion")
@@ -168,15 +169,23 @@ class MainWindow(QMainWindow):
         self.lbl_model_badge = QLabel(f"模型: {os.path.basename(self.detector.model_path)}")
         self.lbl_model_badge.setObjectName("badgeModel")
 
-        self.btn_switch_model = QPushButton("📂 切换权重...")
+        self.btn_switch_model = QPushButton("切换权重...")
         self.btn_switch_model.setObjectName("btnSecondary")
         self.btn_switch_model.clicked.connect(self._on_switch_model)
 
-        gpu_name = "RTX 5060 Ti · CUDA:0" if self.detector.device.startswith("cuda") else "CPU 计算"
-        self.lbl_gpu_badge = QLabel(f"🟢 算力: {gpu_name}")
+        # 动态检测当前机器的显卡型号
+        if self.detector.device.startswith("cuda") and torch.cuda.is_available():
+            try:
+                gpu_name = f"算力: {torch.cuda.get_device_name(0)} (CUDA)"
+            except Exception:
+                gpu_name = "算力: GPU 加速"
+        else:
+            gpu_name = "算力: CPU 模式"
+
+        self.lbl_gpu_badge = QLabel(gpu_name)
         self.lbl_gpu_badge.setObjectName("badgeGpu")
 
-        self.lbl_perf_badge = QLabel("⚡ 耗时: -- ms")
+        self.lbl_perf_badge = QLabel("推理耗时: -- ms")
         self.lbl_perf_badge.setObjectName("badgePerf")
 
         header_layout.addWidget(self.lbl_model_badge)
@@ -185,12 +194,12 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(self.lbl_perf_badge)
         main_layout.addWidget(header_frame)
 
-        # 2. 核心分割器：左侧图像适度收紧，右侧百科与控制大幅拓宽
+        # 2. 核心分割器
         splitter = QSplitter(Qt.Horizontal)
         splitter.setObjectName("mainSplitter")
         splitter.setChildrenCollapsible(False)
 
-        # === 左侧视窗展示区域 (适当约束占比，突出精悍感) ===
+        # === 左侧视窗展示区域 ===
         left_box = QWidget()
         left_layout = QVBoxLayout(left_box)
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -210,19 +219,19 @@ class MainWindow(QMainWindow):
         # 视窗底部工具栏
         toolbar_layout = QHBoxLayout()
         toolbar_layout.setSpacing(6)
-        self.btn_open_img = QPushButton("📁 打开图片")
+        self.btn_open_img = QPushButton("打开图片")
         self.btn_open_img.setObjectName("btnPrimary")
         self.btn_open_img.clicked.connect(self._on_open_image)
 
-        self.btn_toggle_cam = QPushButton("🎥 开启摄像头")
+        self.btn_toggle_cam = QPushButton("开启摄像头")
         self.btn_toggle_cam.setObjectName("btnSecondary")
         self.btn_toggle_cam.clicked.connect(self._on_toggle_camera)
 
-        self.btn_save = QPushButton("💾 保存结果")
+        self.btn_save = QPushButton("保存结果")
         self.btn_save.setObjectName("btnSecondary")
         self.btn_save.clicked.connect(self._on_save_result)
 
-        self.btn_clear = QPushButton("🗑️ 清空")
+        self.btn_clear = QPushButton("清空画面")
         self.btn_clear.setObjectName("btnSecondary")
         self.btn_clear.clicked.connect(self._on_clear_canvas)
 
@@ -239,7 +248,7 @@ class MainWindow(QMainWindow):
 
         splitter.addWidget(left_box)
 
-        # === 右侧控制与大百科面板 (大幅加宽，最小 460px，支持自由放大) ===
+        # === 右侧控制与大百科面板 ===
         right_box = QWidget()
         right_box.setMinimumWidth(460)
         right_layout = QVBoxLayout(right_box)
@@ -247,7 +256,7 @@ class MainWindow(QMainWindow):
         right_layout.setSpacing(10)
 
         # 卡片 1: 置信度调节
-        grp_conf = QGroupBox("置信度调节 (Confidence)")
+        grp_conf = QGroupBox("置信度阈值调节 (Confidence)")
         conf_layout = QVBoxLayout(grp_conf)
         conf_layout.setContentsMargins(10, 8, 10, 8)
         slider_row = QHBoxLayout()
@@ -264,7 +273,7 @@ class MainWindow(QMainWindow):
         conf_layout.addLayout(slider_row)
         right_layout.addWidget(grp_conf)
 
-        # 卡片 2: 检测结果简表 (高度适当压低，把黄金展示位让给百科)
+        # 卡片 2: 检测目标列表
         grp_results = QGroupBox("检测目标列表")
         res_layout = QVBoxLayout(grp_results)
         res_layout.setContentsMargins(8, 8, 8, 8)
@@ -280,8 +289,8 @@ class MainWindow(QMainWindow):
         res_layout.addWidget(self.table_res)
         right_layout.addWidget(grp_results, stretch=1)
 
-        # 卡片 3: 植物百科卡片 (重点放大！占据核心右侧绝大部分篇幅)
-        grp_wiki = QGroupBox("🌿 植物百科与专业养护指南")
+        # 卡片 3: 植物百科卡片
+        grp_wiki = QGroupBox("植物百科与养护指南")
         wiki_layout = QVBoxLayout(grp_wiki)
         wiki_layout.setContentsMargins(10, 10, 10, 10)
 
@@ -293,25 +302,22 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(grp_wiki, stretch=4)
 
         splitter.addWidget(right_box)
-
-        # 初始左右分配比例调整为：左侧 52%，右侧 48% (视觉更均衡，百科更宽敞)
         splitter.setSizes([620, 560])
         main_layout.addWidget(splitter, stretch=1)
 
     def _set_placeholder_text(self):
         self.lbl_display.setText(
-            "<div style='text-align: center; color: #475569; padding: 20px;'>"
-            "<p style='font-size: 38px; margin-bottom: 0px;'>🌿</p>"
-            "<p style='font-size: 15px; font-weight: 600; color: #94A3B8; margin-top: 4px;'>点击【打开图片】或拖放植物照片至此处</p>"
-            "<p style='font-size: 12px; color: #64748B;'>支持 JPG / PNG / WEBP · 支持摄像头实时检测</p>"
+            "<div style='text-align: center; color: #475569; padding: 24px;'>"
+            "<p style='font-size: 16px; font-weight: 600; color: #94A3B8; margin-bottom: 6px;'>点击【打开图片】或将植物照片拖放至此处</p>"
+            "<p style='font-size: 13px; color: #64748B;'>支持 JPG / PNG / WEBP 等常见格式 · 支持摄像头实时检测</p>"
             "</div>"
         )
 
     def _reset_wiki_placeholder(self):
         self.txt_wiki.setHtml(
             "<div style='color: #64748B; padding: 24px; text-align: center; line-height: 1.8;'>"
-            "<p style='font-size: 18px; color: #94A3B8; margin-bottom: 8px;'>🌱 暂未选中植物目标</p>"
-            "<p style='font-size: 14px; color: #64748B;'>导入图片或开启摄像头后，点击上方列表中的植物名称，<br>此处将以大字号卡片呈现对应的<b>学名、日照、浇水与养护要点</b>。</p>"
+            "<p style='font-size: 16px; color: #94A3B8; margin-bottom: 8px;'>暂未选中植物目标</p>"
+            "<p style='font-size: 13px; color: #64748B;'>导入图片或开启摄像头后，点击上方列表中的植物名称，<br>此处将以卡片呈现对应的<b>学名、日照、浇水与养护要点</b>。</p>"
             "</div>"
         )
 
@@ -361,7 +367,7 @@ class MainWindow(QMainWindow):
         self.table_res.setRowCount(0)
         self._reset_wiki_placeholder()
         self.lbl_status_summary.setText("已清空")
-        self.lbl_perf_badge.setText("⚡ 耗时: -- ms")
+        self.lbl_perf_badge.setText("推理耗时: -- ms")
 
     def _process_single_image(self, file_path: str, conf: float = None):
         self._stop_camera_if_running()
@@ -378,7 +384,7 @@ class MainWindow(QMainWindow):
             self._update_results_table(detections)
 
             fps = 1000.0 / time_ms if time_ms > 0 else 0
-            self.lbl_perf_badge.setText(f"⚡ {time_ms:.1f} ms · {fps:.0f} FPS")
+            self.lbl_perf_badge.setText(f"{time_ms:.1f} ms · {fps:.0f} FPS")
             self.lbl_status_summary.setText(f"目标: {len(detections)} 个 | {annotated_frame.shape[1]}x{annotated_frame.shape[0]}")
         except Exception as e:
             QMessageBox.critical(self, "检测失败", f"推理过程出错: {str(e)}")
@@ -437,7 +443,6 @@ class MainWindow(QMainWindow):
 
     def _show_plant_wiki(self, class_name: str):
         wiki = get_plant_wiki(class_name)
-        # 大字号、精美卡片排版
         html = f"""
         <div style='line-height: 1.7; font-size: 14px;'>
             <div style='margin-bottom: 8px;'>
@@ -445,29 +450,29 @@ class MainWindow(QMainWindow):
                 <span style='color: #64748B; font-size: 13px; margin-left: 10px;'>学名: <i>{wiki['scientific_name']}</i></span>
             </div>
             <div style='color: #94A3B8; font-size: 13px; margin-bottom: 10px;'>
-                🌱 <b>分类归属：</b><span style='color: #CBD5E1;'>{wiki['category']}</span>
+                <b>分类归属：</b><span style='color: #CBD5E1;'>{wiki['category']}</span>
             </div>
             
             <hr style='border: none; border-top: 1px solid #1E293B; margin: 8px 0;'>
             
             <div style='background-color: #1E293B; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;'>
                 <p style='margin: 4px 0; font-size: 14px;'>
-                    <b style='color: #F59E0B;'>☀️ 光照偏好：</b>
+                    <b style='color: #F59E0B;'>光照需求：</b>
                     <span style='color: #F8FAFC;'>{wiki['sunlight']}</span>
                 </p>
                 <p style='margin: 4px 0; font-size: 14px;'>
-                    <b style='color: #38BDF8;'>💧 浇水建议：</b>
+                    <b style='color: #38BDF8;'>水分浇灌：</b>
                     <span style='color: #F8FAFC;'>{wiki['watering']}</span>
                 </p>
             </div>
 
             <div style='margin-bottom: 10px;'>
-                <p style='margin: 3px 0; font-size: 15px; font-weight: bold; color: #94A3B8;'>📖 植物概述：</p>
+                <p style='margin: 3px 0; font-size: 15px; font-weight: bold; color: #94A3B8;'>植物特性：</p>
                 <p style='margin: 2px 0; color: #E2E8F0; font-size: 14px; line-height: 1.6;'>{wiki['description']}</p>
             </div>
 
             <div>
-                <p style='margin: 3px 0; font-size: 15px; font-weight: bold; color: #34D399;'>💡 养护要点与注意事项：</p>
+                <p style='margin: 3px 0; font-size: 15px; font-weight: bold; color: #34D399;'>养护要点：</p>
                 <p style='margin: 2px 0; color: #A7F3D0; font-size: 14px; line-height: 1.6;'>{wiki['tips']}</p>
             </div>
         </div>
@@ -488,7 +493,7 @@ class MainWindow(QMainWindow):
         self.cam_worker.error_occurred.connect(self._on_cam_error)
         self.cam_worker.start()
 
-        self.btn_toggle_cam.setText("🛑 停止摄像头")
+        self.btn_toggle_cam.setText("停止摄像头")
         self.btn_toggle_cam.setObjectName("btnDanger")
         self.btn_toggle_cam.setStyle(self.btn_toggle_cam.style())
         self.lbl_status_summary.setText("摄像头推流中")
@@ -499,7 +504,7 @@ class MainWindow(QMainWindow):
         self._update_results_table(detections)
 
         fps = 1000.0 / time_ms if time_ms > 0 else 0
-        self.lbl_perf_badge.setText(f"⚡ {time_ms:.1f} ms · {fps:.0f} FPS")
+        self.lbl_perf_badge.setText(f"{time_ms:.1f} ms · {fps:.0f} FPS")
 
     def _on_cam_error(self, err_msg: str):
         QMessageBox.warning(self, "摄像头错误", err_msg)
@@ -509,7 +514,7 @@ class MainWindow(QMainWindow):
         if self.cam_worker and self.cam_worker.isRunning():
             self.cam_worker.stop()
             self.cam_worker = None
-            self.btn_toggle_cam.setText("🎥 开启摄像头")
+            self.btn_toggle_cam.setText("开启摄像头")
             self.btn_toggle_cam.setObjectName("btnSecondary")
             self.btn_toggle_cam.setStyle(self.btn_toggle_cam.style())
             self.lbl_status_summary.setText("摄像头已关闭")
