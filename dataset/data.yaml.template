@@ -1,8 +1,8 @@
 # YOLO 植物数据集配置模板
 # 当你从 Roboflow 或其他网站下载完 YOLO 格式的数据集后，可按如下格式填写：
 
-# 数据集根目录 (绝对路径或相对于项目根目录的相对路径)
-path: D:/AI/yolozhiwu/dataset
+# 数据集根目录 (使用相对路径保证不同电脑与笔记本均可开箱即用)
+path: dataset
 
 # 训练集、验证集、测试集图片路径
 train: images/train

@@ -35,7 +35,8 @@ yolozhiwu/
 ├── predict.py                # 命令行单图测试脚本
 ├── check_dataset.py          # 数据集格式自检脚本
 ├── run.bat                   # 跨平台自适应快捷启动脚本
-├── install_laptop.bat        # Windows 依赖自动化安装脚本
+├── install_laptop.bat        # Windows 依赖自动化安装引导脚本
+├── setup_laptop.py           # 跨平台环境与依赖自动配置向导
 └── requirements.txt          # Python 依赖清单
 ```
 
