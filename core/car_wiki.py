@@ -179,20 +179,17 @@ def get_vehicle_wiki(class_name: str) -> dict:
     根据识别到的类别英文或中文名称，检索车辆知识库元数据
     """
     key = str(class_name).lower().strip()
-    
-    # 1. 精确匹配
+    if not key:
+        return DEFAULT_VEHICLE_INFO.copy()
+
+    # 1. 知识库直接精确匹配
     if key in VEHICLE_KNOWLEDGE_BASE:
         return VEHICLE_KNOWLEDGE_BASE[key]
-        
-    # 2. 模糊包含匹配
-    for k, info in VEHICLE_KNOWLEDGE_BASE.items():
-        if k in key or key in k:
-            return info
-            
-    # 3. 常见同义词匹配
+
+    # 2. 常见中英文同义词与别名匹配
     alias_map = {
         "qiche": "qiche",
-        "car": "qiche",
+        "car": "car",
         "cars": "qiche",
         "automobile": "qiche",
         "automobiles": "qiche",
@@ -209,13 +206,81 @@ def get_vehicle_wiki(class_name: str) -> dict:
         "semi-truck": "truck",
         "trailer": "truck",
         "bike": "bicycle",
+        "bikes": "bicycle",
         "minivan": "van",
-        "commercial van": "van"
+        "commercial van": "van",
+        "sports_car": "sports car",
+        "traffic_light": "traffic light",
+        "stop_sign": "stop sign",
+        "traffic-light": "traffic light",
+        "stop-sign": "stop sign",
+        "pedestrian": "person",
+        "people": "person",
+        "persons": "person",
+        # 中文同义词与关键词反向映射
+        "汽车": "qiche",
+        "轿车": "car",
+        "越野车": "suv",
+        "大巴": "bus",
+        "大客车": "bus",
+        "公交车": "bus",
+        "公共汽车": "bus",
+        "卡车": "truck",
+        "货车": "truck",
+        "重卡": "truck",
+        "摩托车": "motorcycle",
+        "电摩": "motorcycle",
+        "机动二轮车": "motorcycle",
+        "面包车": "van",
+        "厢式货车": "van",
+        "商务车": "mpv",
+        "保姆车": "mpv",
+        "跑车": "sports car",
+        "轿跑": "sports car",
+        "皮卡": "pickup",
+        "皮卡车": "pickup",
+        "自行车": "bicycle",
+        "单车": "bicycle",
+        "脚踏车": "bicycle",
+        "红绿灯": "traffic light",
+        "交通信号灯": "traffic light",
+        "信号灯": "traffic light",
+        "停步让行": "stop sign",
+        "停步标志": "stop sign",
+        "让行标志": "stop sign",
+        "行人": "person",
     }
     if key in alias_map:
         return VEHICLE_KNOWLEDGE_BASE[alias_map[key]]
 
-    # 4. 默认安全兜底
+    # 3. 符号规范化匹配 (下划线/连字符转空格)
+    normalized = key.replace("_", " ").replace("-", " ")
+    if normalized in VEHICLE_KNOWLEDGE_BASE:
+        return VEHICLE_KNOWLEDGE_BASE[normalized]
+    if normalized in alias_map:
+        return VEHICLE_KNOWLEDGE_BASE[alias_map[normalized]]
+
+    # 4. 复数形式剥离匹配
+    if key.endswith("s") and len(key) > 3:
+        singular = key[:-1]
+        if singular in VEHICLE_KNOWLEDGE_BASE:
+            return VEHICLE_KNOWLEDGE_BASE[singular]
+        if singular in alias_map:
+            return VEHICLE_KNOWLEDGE_BASE[alias_map[singular]]
+
+    # 5. 长词优先的子串包含匹配 (按 key 长度降序，避免短词如 car 误匹配 sports car)
+    sorted_keys = sorted(VEHICLE_KNOWLEDGE_BASE.keys(), key=len, reverse=True)
+    for k in sorted_keys:
+        if k in normalized:
+            return VEHICLE_KNOWLEDGE_BASE[k]
+
+    # 6. 中文关键词包含匹配
+    for k, info in VEHICLE_KNOWLEDGE_BASE.items():
+        cn_title = info.get("cn_name", "")
+        if key in cn_title or any(part in cn_title for part in key.split() if len(part) >= 2):
+            return info
+
+    # 7. 默认安全兜底
     info = DEFAULT_VEHICLE_INFO.copy()
     info["cn_name"] = f"{class_name} (车辆目标)"
     info["en_name"] = class_name

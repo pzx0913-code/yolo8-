@@ -8,6 +8,7 @@ YOLO 汽车与车型检测模型一键训练脚本
 """
 
 import os
+import sys
 import shutil
 import argparse
 import torch
@@ -88,9 +89,10 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default="weights/yolov8n.pt", help="初始底模权重")
     args = parser.parse_args()
 
-    train(
+    ok = train(
         data_yaml=args.data,
         epochs=args.epochs,
         batch_size=args.batch,
         base_model=args.model
     )
+    sys.exit(0 if ok else 1)

@@ -89,15 +89,15 @@ class SmoothImageDisplay(QLabel):
             super().setPixmap(scaled)
 
 
-class CameraWorker(QThread):
-    """后台摄像头连续推流与推理线程"""
+class MediaStreamWorker(QThread):
+    """后台视频流 / 摄像头连续推流与推理线程"""
     frame_ready = Signal(QImage, list, float, object)
     error_occurred = Signal(str)
 
-    def __init__(self, detector: VehicleDetector, cam_index: int = 0, conf: float = 0.25):
+    def __init__(self, detector: VehicleDetector, source=0, conf: float = 0.25):
         super().__init__()
         self.detector = detector
-        self.cam_index = cam_index
+        self.source = source
         self.conf = conf
         self.running = False
 
@@ -105,17 +105,22 @@ class CameraWorker(QThread):
         self.conf = conf
 
     def run(self):
-        cap = cv2.VideoCapture(self.cam_index)
+        cap = cv2.VideoCapture(self.source)
         try:
             if not cap.isOpened():
-                self.error_occurred.emit(f"无法启动索引为 {self.cam_index} 的摄像头设备，请确认摄像头未被占用。")
+                src_name = f"摄像头 (索引 {self.source})" if isinstance(self.source, int) else f"视频文件 ({os.path.basename(str(self.source))})"
+                self.error_occurred.emit(f"无法启动 {src_name}，请确认设备未被占用或文件格式正确。")
                 return
 
             self.running = True
+            is_file = isinstance(self.source, str)
+            fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+            frame_delay = max(0.001, 1.0 / fps)
+
             while self.running:
+                t0 = time.perf_counter()
                 ret, frame = cap.read()
                 if not ret:
-                    self.error_occurred.emit("摄像头视频流读取中断或画面获取失败。")
                     break
 
                 annotated_frame, detections, time_ms = self.detector.predict_image(frame, conf=self.conf)
@@ -126,12 +131,21 @@ class CameraWorker(QThread):
                 q_img = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888).copy()
 
                 self.frame_ready.emit(q_img, detections, time_ms, annotated_frame)
+
+                if is_file:
+                    elapsed = time.perf_counter() - t0
+                    rem = frame_delay - elapsed
+                    if rem > 0.005:
+                        time.sleep(rem)
         finally:
             cap.release()
 
     def stop(self):
         self.running = False
         self.wait()
+
+
+CameraWorker = MediaStreamWorker
 
 
 class MainWindow(QMainWindow):
@@ -146,7 +160,9 @@ class MainWindow(QMainWindow):
 
         self.current_raw_img_path = None
         self.current_annotated_bgr = None
-        self.cam_worker = None
+        self.current_detections = []
+        self.current_stream_type = None  # None | "camera" | "video"
+        self.stream_worker = None
         self._current_wiki_cls = None
         self._user_selected_cls = None
 
@@ -158,6 +174,14 @@ class MainWindow(QMainWindow):
 
         self._init_ui()
         self._load_stylesheet()
+
+    @property
+    def cam_worker(self):
+        return self.stream_worker
+
+    @cam_worker.setter
+    def cam_worker(self, worker):
+        self.stream_worker = worker
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -248,6 +272,10 @@ class MainWindow(QMainWindow):
         self.btn_open_img.setObjectName("btnPrimary")
         self.btn_open_img.clicked.connect(self._on_open_image)
 
+        self.btn_open_video = QPushButton("打开视频")
+        self.btn_open_video.setObjectName("btnSecondary")
+        self.btn_open_video.clicked.connect(self._on_open_video)
+
         self.btn_toggle_cam = QPushButton("开启摄像头")
         self.btn_toggle_cam.setObjectName("btnSecondary")
         self.btn_toggle_cam.clicked.connect(self._on_toggle_camera)
@@ -264,6 +292,7 @@ class MainWindow(QMainWindow):
         self.lbl_status_summary.setObjectName("lblStatus")
 
         toolbar_layout.addWidget(self.btn_open_img)
+        toolbar_layout.addWidget(self.btn_open_video)
         toolbar_layout.addWidget(self.btn_toggle_cam)
         toolbar_layout.addWidget(self.btn_save)
         toolbar_layout.addWidget(self.btn_clear)
@@ -273,7 +302,7 @@ class MainWindow(QMainWindow):
 
         splitter.addWidget(left_box)
 
-        # === 右侧控制与车辆特征面板 ===
+        # === 右侧参数控制与知识库信息展示 ===
         right_box = QWidget()
         right_box.setMinimumWidth(460)
         right_layout = QVBoxLayout(right_box)
@@ -308,8 +337,8 @@ class MainWindow(QMainWindow):
         self.table_res.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.table_res.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.table_res.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self.table_res.setMinimumHeight(110)
-        self.table_res.setMaximumHeight(160)
+        self.table_res.setMinimumHeight(120)
+        self.table_res.setMaximumHeight(220)
         self.table_res.cellClicked.connect(self._on_table_cell_clicked)
         res_layout.addWidget(self.table_res)
         right_layout.addWidget(grp_results, stretch=1)
@@ -359,10 +388,11 @@ class MainWindow(QMainWindow):
             self, "选择模型权重", "weights", "YOLO Weights (*.pt)"
         )
         if file_path:
-            # 若摄像头正在运行，先优雅停止，避免模型热切换引发并发推理崩溃
-            was_cam_running = bool(self.cam_worker and self.cam_worker.isRunning())
-            if was_cam_running:
-                self._stop_camera_if_running()
+            was_stream_running = bool(self.stream_worker and self.stream_worker.isRunning())
+            saved_source = self.stream_worker.source if was_stream_running else None
+            saved_type = self.current_stream_type if was_stream_running else None
+            if was_stream_running:
+                self._stop_stream_if_running()
 
             try:
                 self.detector.load_model(file_path)
@@ -370,14 +400,14 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "切换成功", f"成功载入新权重:\n{os.path.basename(file_path)}")
 
                 # 恢复之前的工作状态
-                if was_cam_running:
-                    self._start_camera()
+                if was_stream_running and saved_source is not None:
+                    self._start_stream(saved_source, saved_type)
                 elif self.current_raw_img_path:
                     self._process_single_image(self.current_raw_img_path)
             except Exception as e:
                 QMessageBox.critical(self, "错误", f"载入权重失败: {str(e)}")
-                if was_cam_running:
-                    self._start_camera()
+                if was_stream_running and saved_source is not None:
+                    self._start_stream(saved_source, saved_type)
 
     def _on_conf_changed(self, value):
         self.lbl_conf_val.setText(f"{value}%")
@@ -402,9 +432,10 @@ class MainWindow(QMainWindow):
             self._process_single_image(file_path)
 
     def _on_clear_canvas(self):
-        self._stop_camera_if_running()
+        self._stop_stream_if_running()
         self.current_raw_img_path = None
         self.current_annotated_bgr = None
+        self.current_detections = []
         self._user_selected_cls = None
         self.lbl_display.clear_display()
         self._set_placeholder_text()
@@ -414,7 +445,7 @@ class MainWindow(QMainWindow):
         self.lbl_perf_badge.setText("推理耗时: -- ms")
 
     def _process_single_image(self, file_path: str, conf: float = None):
-        self._stop_camera_if_running()
+        self._stop_stream_if_running()
         self.current_raw_img_path = file_path
 
         if conf is None:
@@ -423,6 +454,7 @@ class MainWindow(QMainWindow):
         try:
             annotated_frame, detections, time_ms = self.detector.predict_image(file_path, conf=conf)
             self.current_annotated_bgr = annotated_frame
+            self.current_detections = detections
 
             self._display_bgr_frame(annotated_frame)
             self._update_results_table(detections)
@@ -555,29 +587,53 @@ class MainWindow(QMainWindow):
 
     _show_plant_wiki = _show_qiche_wiki
 
-    # --- 摄像头流控制 ---
+    # --- 视频流与摄像头连续检测控制 ---
     def _on_toggle_camera(self):
-        if self.cam_worker and self.cam_worker.isRunning():
-            self._stop_camera_if_running()
+        if self.stream_worker and self.stream_worker.isRunning() and self.current_stream_type == "camera":
+            self._stop_stream_if_running()
         else:
-            self._start_camera()
+            self._stop_stream_if_running()
+            self._start_stream(source=0, stream_type="camera")
+
+    def _on_open_video(self):
+        if self.stream_worker and self.stream_worker.isRunning() and self.current_stream_type == "video":
+            self._stop_stream_if_running()
+            return
+
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "选择车辆视频", "", "视频文件 (*.mp4 *.avi *.mov *.mkv *.wmv)"
+        )
+        if file_path:
+            self._stop_stream_if_running()
+            self._start_stream(source=file_path, stream_type="video")
+
+    def _start_stream(self, source, stream_type: str = "camera"):
+        conf = self.slider_conf.value() / 100.0
+        self.current_stream_type = stream_type
+        self.stream_worker = MediaStreamWorker(self.detector, source=source, conf=conf)
+        self.stream_worker.frame_ready.connect(self._on_stream_frame_ready)
+        self.stream_worker.error_occurred.connect(self._on_stream_error)
+        self.stream_worker.finished.connect(self._on_stream_finished)
+        self.stream_worker.start()
+
+        if stream_type == "camera":
+            self.btn_toggle_cam.setText("停止摄像头")
+            self.btn_toggle_cam.setObjectName("btnDanger")
+            self.btn_toggle_cam.setStyle(self.btn_toggle_cam.style())
+            self.lbl_status_summary.setText("摄像头推流中")
+        else:
+            self.btn_open_video.setText("停止视频")
+            self.btn_open_video.setObjectName("btnDanger")
+            self.btn_open_video.setStyle(self.btn_open_video.style())
+            self.lbl_status_summary.setText(f"视频分析中: {os.path.basename(str(source))}")
 
     def _start_camera(self):
-        conf = self.slider_conf.value() / 100.0
-        self.cam_worker = CameraWorker(self.detector, cam_index=0, conf=conf)
-        self.cam_worker.frame_ready.connect(self._on_cam_frame_ready)
-        self.cam_worker.error_occurred.connect(self._on_cam_error)
-        self.cam_worker.finished.connect(self._on_cam_finished)
-        self.cam_worker.start()
+        self._start_stream(source=0, stream_type="camera")
 
-        self.btn_toggle_cam.setText("停止摄像头")
-        self.btn_toggle_cam.setObjectName("btnDanger")
-        self.btn_toggle_cam.setStyle(self.btn_toggle_cam.style())
-        self.lbl_status_summary.setText("摄像头推流中")
-
-    def _on_cam_frame_ready(self, q_img: QImage, detections: list, time_ms: float, bgr_frame: np.ndarray = None):
+    def _on_stream_frame_ready(self, q_img: QImage, detections: list, time_ms: float, bgr_frame: np.ndarray = None):
         if bgr_frame is not None:
             self.current_annotated_bgr = bgr_frame
+        self.current_detections = detections
         pixmap = QPixmap.fromImage(q_img)
         self.lbl_display.set_display_pixmap(pixmap)
         self._update_results_table(detections)
@@ -585,40 +641,103 @@ class MainWindow(QMainWindow):
         fps = 1000.0 / time_ms if time_ms > 0 else 0
         self.lbl_perf_badge.setText(f"{time_ms:.1f} ms · {fps:.0f} FPS")
 
-    def _reset_camera_ui_state(self, status_text: str = "摄像头已关闭"):
+    _on_cam_frame_ready = _on_stream_frame_ready
+
+    def _reset_stream_ui_state(self, status_text: str = None):
         self.btn_toggle_cam.setText("开启摄像头")
         self.btn_toggle_cam.setObjectName("btnSecondary")
         self.btn_toggle_cam.setStyle(self.btn_toggle_cam.style())
-        self.lbl_status_summary.setText(status_text)
 
-    def _on_cam_finished(self):
-        self._reset_camera_ui_state()
-        self.cam_worker = None
+        self.btn_open_video.setText("打开视频")
+        self.btn_open_video.setObjectName("btnSecondary")
+        self.btn_open_video.setStyle(self.btn_open_video.style())
 
-    def _on_cam_error(self, err_msg: str):
-        self._reset_camera_ui_state("摄像头异常关闭")
-        if self.cam_worker:
-            if self.cam_worker.isRunning():
-                self.cam_worker.stop()
-            self.cam_worker = None
-        QMessageBox.warning(self, "摄像头错误", err_msg)
+        if status_text:
+            self.lbl_status_summary.setText(status_text)
+        elif self.current_stream_type == "camera":
+            self.lbl_status_summary.setText("摄像头已关闭")
+        elif self.current_stream_type == "video":
+            self.lbl_status_summary.setText("视频处理已完成")
+        else:
+            self.lbl_status_summary.setText("就绪")
 
-    def _stop_camera_if_running(self):
-        if self.cam_worker:
-            if self.cam_worker.isRunning():
-                self.cam_worker.stop()
-            self.cam_worker = None
-        self._reset_camera_ui_state("摄像头已关闭")
+        self.current_stream_type = None
+
+    _reset_camera_ui_state = _reset_stream_ui_state
+
+    def _on_stream_finished(self):
+        self._reset_stream_ui_state()
+        self.stream_worker = None
+
+    _on_cam_finished = _on_stream_finished
+
+    def _on_stream_error(self, err_msg: str):
+        self._reset_stream_ui_state("推流异常中断")
+        if self.stream_worker:
+            if self.stream_worker.isRunning():
+                self.stream_worker.stop()
+            self.stream_worker = None
+        QMessageBox.warning(self, "设备/视频错误", err_msg)
+
+    _on_cam_error = _on_stream_error
+
+    def _stop_stream_if_running(self):
+        if self.stream_worker:
+            if self.stream_worker.isRunning():
+                self.stream_worker.stop()
+            self.stream_worker = None
+        self._reset_stream_ui_state()
+
+    _stop_camera_if_running = _stop_stream_if_running
 
     def _on_save_result(self):
-        if self.current_annotated_bgr is None:
-            QMessageBox.information(self, "提示", "暂无检测结果图像可供保存")
+        if self.current_annotated_bgr is None and not self.current_detections:
+            QMessageBox.information(self, "提示", "暂无检测结果图像或数据可供保存")
             return
 
-        save_path, _ = QFileDialog.getSaveFileName(
-            self, "保存检测结果", "car_detection_result.jpg", "JPEG Image (*.jpg);;PNG Image (*.png)"
+        save_path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "保存检测结果",
+            "car_detection_result.jpg",
+            "JPEG 图像 (*.jpg);;PNG 图像 (*.png);;CSV 数据报表 (*.csv)"
         )
-        if save_path:
+        if not save_path:
+            return
+
+        if save_path.lower().endswith(".csv") or "csv" in selected_filter.lower():
+            if not save_path.lower().endswith(".csv"):
+                save_path += ".csv"
+            try:
+                import csv
+                with open(save_path, "w", newline="", encoding="utf-8-sig") as f:
+                    writer = csv.writer(f)
+                    writer.writerow([
+                        "序号", "类别英文", "中文名称", "置信度",
+                        "X1", "Y1", "X2", "Y2",
+                        "分类归属", "动力构型", "尺寸规格", "牌照准驾", "安全规程"
+                    ])
+                    for idx, det in enumerate(self.current_detections, 1):
+                        wiki = get_vehicle_wiki(det["class_name"])
+                        box = det.get("box", [0, 0, 0, 0])
+                        writer.writerow([
+                            idx,
+                            det["class_name"],
+                            wiki.get("cn_name", ""),
+                            f"{det['confidence']*100:.1f}%",
+                            box[0], box[1], box[2], box[3],
+                            wiki.get("category", ""),
+                            wiki.get("powertrain", ""),
+                            wiki.get("dimensions", ""),
+                            wiki.get("license_plate", ""),
+                            wiki.get("safety_tips", "")
+                        ])
+                QMessageBox.information(self, "导出成功", f"检测数据清单已成功导出至:\n{save_path}")
+            except Exception as e:
+                QMessageBox.critical(self, "导出失败", f"写入 CSV 文件失败: {str(e)}")
+        else:
+            if self.current_annotated_bgr is None:
+                QMessageBox.warning(self, "提示", "当前无有效画面帧图像可保存")
+                return
             ok = imwrite_unicode(save_path, self.current_annotated_bgr)
             if ok:
                 QMessageBox.information(self, "保存成功", f"结果图像已成功保存至:\n{save_path}")
@@ -637,7 +756,10 @@ class MainWindow(QMainWindow):
             ext = os.path.splitext(file_path)[1].lower()
             if ext in [".jpg", ".png", ".jpeg", ".bmp", ".webp"]:
                 self._process_single_image(file_path)
+            elif ext in [".mp4", ".avi", ".mov", ".mkv", ".flv", ".wmv"]:
+                self._stop_stream_if_running()
+                self._start_stream(source=file_path, stream_type="video")
 
     def closeEvent(self, event):
-        self._stop_camera_if_running()
+        self._stop_stream_if_running()
         event.accept()
