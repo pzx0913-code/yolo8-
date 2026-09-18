@@ -41,6 +41,22 @@ def enable_windows_dark_title_bar(window: QMainWindow):
             pass
 
 
+def imwrite_unicode(file_path: str, img: np.ndarray) -> bool:
+    """Windows 下安全保存带有中文路径的图像，杜绝 OpenCV 写入乱码或静默失败"""
+    try:
+        ext = os.path.splitext(file_path)[1]
+        if not ext:
+            ext = ".jpg"
+            file_path += ext
+        ok, buf = cv2.imencode(ext, img)
+        if ok:
+            buf.tofile(file_path)
+            return True
+        return False
+    except Exception:
+        return False
+
+
 class SmoothImageDisplay(QLabel):
     """自适应平滑图像视窗组件：窗口拉伸放大或缩小时，图片按原比例动态重绘适配"""
     def __init__(self, parent=None):
@@ -75,7 +91,7 @@ class SmoothImageDisplay(QLabel):
 
 class CameraWorker(QThread):
     """后台摄像头连续推流与推理线程"""
-    frame_ready = Signal(QImage, list, float)
+    frame_ready = Signal(QImage, list, float, object)
     error_occurred = Signal(str)
 
     def __init__(self, detector: PlantDetector, cam_index: int = 0, conf: float = 0.25):
@@ -107,7 +123,7 @@ class CameraWorker(QThread):
             rgb_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
             q_img = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888).copy()
 
-            self.frame_ready.emit(q_img, detections, time_ms)
+            self.frame_ready.emit(q_img, detections, time_ms, annotated_frame)
 
         cap.release()
 
@@ -130,6 +146,8 @@ class MainWindow(QMainWindow):
         self.current_raw_img_path = None
         self.current_annotated_bgr = None
         self.cam_worker = None
+        self._current_wiki_cls = None
+        self._user_selected_cls = None
 
         self._init_ui()
         self._load_stylesheet()
@@ -314,6 +332,7 @@ class MainWindow(QMainWindow):
         )
 
     def _reset_wiki_placeholder(self):
+        self._current_wiki_cls = None
         self.txt_wiki.setHtml(
             "<div style='color: #64748B; padding: 24px; text-align: center; line-height: 1.8;'>"
             "<p style='font-size: 16px; color: #94A3B8; margin-bottom: 8px;'>暂未选中植物目标</p>"
@@ -362,6 +381,7 @@ class MainWindow(QMainWindow):
         self._stop_camera_if_running()
         self.current_raw_img_path = None
         self.current_annotated_bgr = None
+        self._user_selected_cls = None
         self.lbl_display.clear_display()
         self._set_placeholder_text()
         self.table_res.setRowCount(0)
@@ -400,6 +420,7 @@ class MainWindow(QMainWindow):
     def _update_results_table(self, detections: list):
         self.table_res.setRowCount(0)
         plant_row_to_focus = None
+        user_selected_row = None
 
         for row, det in enumerate(detections):
             self.table_res.insertRow(row)
@@ -424,11 +445,19 @@ class MainWindow(QMainWindow):
             self.table_res.setItem(row, 1, item_conf)
             self.table_res.setItem(row, 2, item_box)
 
+            if self._user_selected_cls and cls_name.lower() == self._user_selected_cls.lower():
+                user_selected_row = row
+
             if plant_row_to_focus is None and cls_name.lower() in ["potted plant", "plant", "flower", "rose", "succulent", "monstera", "alocasia"]:
                 plant_row_to_focus = row
 
         if len(detections) > 0:
-            target_row = plant_row_to_focus if plant_row_to_focus is not None else 0
+            if user_selected_row is not None:
+                target_row = user_selected_row
+            elif plant_row_to_focus is not None:
+                target_row = plant_row_to_focus
+            else:
+                target_row = 0
             self.table_res.selectRow(target_row)
             selected_cls = self.table_res.item(target_row, 0).data(Qt.UserRole)
             self._show_plant_wiki(selected_cls)
@@ -439,9 +468,13 @@ class MainWindow(QMainWindow):
         item = self.table_res.item(row, 0)
         if item:
             raw_cls = item.data(Qt.UserRole)
-            self._show_plant_wiki(raw_cls)
+            self._user_selected_cls = raw_cls
+            self._show_plant_wiki(raw_cls, force=True)
 
-    def _show_plant_wiki(self, class_name: str):
+    def _show_plant_wiki(self, class_name: str, force: bool = False):
+        if not force and class_name == self._current_wiki_cls:
+            return
+        self._current_wiki_cls = class_name
         wiki = get_plant_wiki(class_name)
         html = f"""
         <div style='line-height: 1.7; font-size: 14px;'>
@@ -498,7 +531,9 @@ class MainWindow(QMainWindow):
         self.btn_toggle_cam.setStyle(self.btn_toggle_cam.style())
         self.lbl_status_summary.setText("摄像头推流中")
 
-    def _on_cam_frame_ready(self, q_img: QImage, detections: list, time_ms: float):
+    def _on_cam_frame_ready(self, q_img: QImage, detections: list, time_ms: float, bgr_frame: np.ndarray = None):
+        if bgr_frame is not None:
+            self.current_annotated_bgr = bgr_frame
         pixmap = QPixmap.fromImage(q_img)
         self.lbl_display.set_display_pixmap(pixmap)
         self._update_results_table(detections)
@@ -520,16 +555,19 @@ class MainWindow(QMainWindow):
             self.lbl_status_summary.setText("摄像头已关闭")
 
     def _on_save_result(self):
-        if self.current_annotated_bgr is None and (not self.cam_worker or not self.cam_worker.isRunning()):
+        if self.current_annotated_bgr is None:
             QMessageBox.information(self, "提示", "暂无检测结果图像可供保存")
             return
 
         save_path, _ = QFileDialog.getSaveFileName(
             self, "保存检测结果", "plant_result.jpg", "JPEG Image (*.jpg);;PNG Image (*.png)"
         )
-        if save_path and self.current_annotated_bgr is not None:
-            cv2.imwrite(save_path, self.current_annotated_bgr)
-            QMessageBox.information(self, "保存成功", f"结果图像已成功保存至:\n{save_path}")
+        if save_path:
+            ok = imwrite_unicode(save_path, self.current_annotated_bgr)
+            if ok:
+                QMessageBox.information(self, "保存成功", f"结果图像已成功保存至:\n{save_path}")
+            else:
+                QMessageBox.critical(self, "保存失败", f"写入图像文件失败，请检查文件路径:\n{save_path}")
 
     # --- 拖拽支持 ---
     def dragEnterEvent(self, event: QDragEnterEvent):

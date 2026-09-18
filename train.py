@@ -44,8 +44,8 @@ def train(data_yaml="dataset/data.yaml", epochs=50, batch_size=16, base_model="w
     print(f"[*] 加载基底模型: {base_model}")
     model = YOLO(base_model)
 
-    # 4. 开始训练
-    num_workers = min(4, os.cpu_count() or 1)
+    # 4. 开始训练 (Windows 下限制 worker 数量避免共享内存与死锁异常)
+    num_workers = min(2, os.cpu_count() or 1) if os.name == "nt" else min(4, os.cpu_count() or 1)
     print(f"[*] 训练参数: epochs={epochs}, batch={batch_size}, imgsz=640, device={device}, workers={num_workers}")
     results = model.train(
         data=data_yaml,

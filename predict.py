@@ -14,6 +14,21 @@ from core.detector import PlantDetector
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 
+def imwrite_unicode(file_path: str, img) -> bool:
+    try:
+        ext = os.path.splitext(file_path)[1]
+        if not ext:
+            ext = ".jpg"
+            file_path += ext
+        ok, buf = cv2.imencode(ext, img)
+        if ok:
+            buf.tofile(file_path)
+            return True
+        return False
+    except Exception:
+        return False
+
+
 def main():
     parser = argparse.ArgumentParser(description="YOLO 植物识别快速推理测试")
     parser.add_argument("--source", type=str, default="https://ultralytics.com/images/bus.jpg", help="图片路径或 URL")
@@ -31,7 +46,7 @@ def main():
     print("=" * 50)
 
     save_path = "output_result.jpg"
-    cv2.imwrite(save_path, annotated_frame)
+    imwrite_unicode(save_path, annotated_frame)
     print(f"[*] 结果图像已保存至: {os.path.abspath(save_path)}\n")
 
 
