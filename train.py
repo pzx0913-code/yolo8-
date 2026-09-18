@@ -55,26 +55,28 @@ def train(data_yaml="dataset/data.yaml", epochs=50, batch_size=16, base_model="w
         device=device,
         workers=num_workers,
         project="runs/detect",
-        name="car_train",
+        name="qiche_train",
         exist_ok=True,
         plots=True
     )
 
     # 5. 自动提取最佳权重至 weights/ 目录
-    best_pt = os.path.join("runs", "detect", "car_train", "weights", "best.pt")
-    target_pt = os.path.join("weights", "best_car.pt")
+    best_pt = os.path.join("runs", "detect", "qiche_train", "weights", "best.pt")
+    target_pt = os.path.join("weights", "best_qiche.pt")
+    alt_target_pt = os.path.join("weights", "best_car.pt")
 
     if os.path.exists(best_pt):
         os.makedirs("weights", exist_ok=True)
         shutil.copy(best_pt, target_pt)
+        shutil.copy(best_pt, alt_target_pt)
         print("=" * 60)
-        print(f"[OK] 车辆检测模型训练完成！")
+        print(f"[OK] 汽车检测模型训练完成！")
         print(f"[OK] 最优权重已同步至: {os.path.abspath(target_pt)}")
-        print(f"[OK] 软件启动时 (python app.py) 将自动优先加载该专属汽车检测模型。")
+        print(f"[OK] 软件启动时 (python app.py) 将自动优先加载该专属 qiche 检测模型。")
         print("=" * 60)
         return True
     else:
-        print("[!] 提示: 训练完成，但未在预期路径找到 best.pt，请检查 runs/detect/car_train 目录。")
+        print("[!] 提示: 训练完成，但未在预期路径找到 best.pt，请检查 runs/detect/qiche_train 目录。")
         return False
 
 

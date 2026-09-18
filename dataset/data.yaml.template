@@ -12,7 +12,7 @@ test: images/test   # 可选
 # 类别数量与名称示例
 nc: 6
 names:
-  0: car            # 轿车 / 乘用车
+  0: qiche          # 汽车 / 乘用车 (通用轿车/乘用车辆)
   1: suv            # 城市多用途 SUV
   2: bus            # 公交 / 大客车
   3: truck          # 货运卡车

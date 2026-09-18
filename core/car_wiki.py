@@ -5,9 +5,20 @@
 """
 
 VEHICLE_KNOWLEDGE_BASE = {
+    "qiche": {
+        "cn_name": "汽车 / 乘用车 (qiche)",
+        "en_name": "Qiche / Automobile",
+        "category": "乘用车 · M1 类小型客车 (轿车/SUV/新能源汽车)",
+        "powertrain": "纯电 (EV) / 混动 (PHEV/HEV) / 燃油 (ICE)",
+        "dimensions": "车长 4400~5100 mm · 整备质量 1.3~2.3 吨",
+        "license_plate": "小型汽车号牌 (蓝牌/绿牌) · 准驾车型 C1/C2",
+        "scenario": "城市日常通勤、城际高速公路出行，兼具操控性、舒适性与经济能耗",
+        "tech_features": "承载式高刚性车身，配置 ABS 防抱死、ESP 电子稳定与 L2 级智能驾驶辅助系统",
+        "safety_tips": "行车注意盲区监测，遇行人和大车主动保持安全车距，严禁超速与疲劳驾驶"
+    },
     "car": {
-        "cn_name": "轿车 / 家用乘用车",
-        "en_name": "Car / Passenger Vehicle",
+        "cn_name": "汽车 / 轿车 (car)",
+        "en_name": "Car / Sedan",
         "category": "乘用车 · M1 类小型客车 (紧凑型/中大型)",
         "powertrain": "纯电 (EV) / 插电混动 (PHEV) / 燃油 (ICE)",
         "dimensions": "车长 4500~5000 mm · 整备质量 1.3~2.1 吨",
@@ -180,9 +191,13 @@ def get_vehicle_wiki(class_name: str) -> dict:
             
     # 3. 常见同义词匹配
     alias_map = {
+        "qiche": "qiche",
+        "car": "qiche",
+        "cars": "qiche",
+        "automobile": "qiche",
+        "automobiles": "qiche",
         "sedan": "car",
-        "automobile": "car",
-        "passenger car": "car",
+        "passenger car": "qiche",
         "suvs": "suv",
         "motorbikes": "motorcycle",
         "motorbike": "motorcycle",
@@ -207,5 +222,6 @@ def get_vehicle_wiki(class_name: str) -> dict:
     return info
 
 
-# 保持向后兼容性别名
+# 别名导出
+get_qiche_wiki = get_vehicle_wiki
 get_plant_wiki = get_vehicle_wiki

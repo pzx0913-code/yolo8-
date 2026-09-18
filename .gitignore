@@ -19,12 +19,17 @@ dataset/labels/
 bus.jpg
 output_result.jpg
 plant_result.jpg
+car_result.jpg
+qiche_result.jpg
+car_detection_result.jpg
+crash_log.txt
 
 # 虚拟环境与本地配置
 venv/
 env/
 .venv/
 plant_yolo_env/
+qiche_yolo_env/
 .env
 
 # IDE 与操作系统残留

@@ -422,7 +422,7 @@ class MainWindow(QMainWindow):
         user_selected_row = None
 
         vehicle_priority_classes = [
-            "car", "suv", "bus", "truck", "motorcycle", "van", "mpv",
+            "qiche", "car", "suv", "bus", "truck", "motorcycle", "van", "mpv",
             "sports car", "pickup", "bicycle", "traffic light", "stop sign"
         ]
 
@@ -524,9 +524,11 @@ class MainWindow(QMainWindow):
         """
         self.txt_wiki.setHtml(html)
 
-    # 保持向后兼容方法
-    def _show_plant_wiki(self, class_name: str, force: bool = False):
+    # 别名与向后兼容方法
+    def _show_qiche_wiki(self, class_name: str, force: bool = False):
         self._show_vehicle_wiki(class_name, force=force)
+
+    _show_plant_wiki = _show_qiche_wiki
 
     # --- 摄像头流控制 ---
     def _on_toggle_camera(self):

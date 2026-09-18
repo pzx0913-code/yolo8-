@@ -18,9 +18,12 @@ class VehicleDetector:
         weights_dir = os.path.join(base_dir, "weights")
 
         if model_path is None:
+            qiche_pt = os.path.join(weights_dir, "best_qiche.pt")
             car_pt = os.path.join(weights_dir, "best_car.pt")
             base_pt = os.path.join(weights_dir, "yolov8n.pt")
-            if os.path.exists(car_pt):
+            if os.path.exists(qiche_pt):
+                model_path = qiche_pt
+            elif os.path.exists(car_pt):
                 model_path = car_pt
             elif os.path.exists(base_pt):
                 model_path = base_pt
@@ -104,5 +107,6 @@ class VehicleDetector:
         return annotated_frame, detections, self.last_inference_time
 
 
-# 保持向后兼容性别名
+# 别名导出
+QicheDetector = VehicleDetector
 PlantDetector = VehicleDetector

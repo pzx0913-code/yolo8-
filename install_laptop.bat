@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
-title YOLO Plant Recognition System - Installer
+title YOLO Qiche Detection System - Installer
 
 :: Check if setup_laptop.py exists
 if not exist "setup_laptop.py" (
