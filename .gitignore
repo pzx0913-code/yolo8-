@@ -18,6 +18,7 @@ dataset/labels/
 # 测试临时图片
 bus.jpg
 output_result.jpg
+output_result.mp4
 plant_result.jpg
 car_result.jpg
 qiche_result.jpg

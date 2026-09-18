@@ -8,6 +8,7 @@
 """
 
 import os
+import sys
 import glob
 import yaml
 
@@ -78,4 +79,5 @@ def check_dataset(dataset_dir="dataset"):
 
 
 if __name__ == "__main__":
-    check_dataset()
+    success = check_dataset()
+    sys.exit(0 if success else 1)

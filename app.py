@@ -15,14 +15,18 @@ if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
 
 
-def show_fatal_error_dialog(title: str, message: str):
+def show_fatal_error_dialog(title: str, message: str, exc: BaseException = None):
     """即使在 GUI 依赖完全缺失的情况下，也能弹出 Windows 原生错误弹窗"""
     print(f"\n[FATAL ERROR] {title}\n{message}\n", file=sys.stderr)
     try:
         with open(os.path.join(CURRENT_DIR, "crash_log.txt"), "w", encoding="utf-8") as f:
             f.write(f"Title: {title}\n")
             f.write(f"Message:\n{message}\n\n")
-            traceback.print_exc(file=f)
+            f.write("Traceback Details:\n")
+            if exc is not None:
+                traceback.print_exception(type(exc), exc, exc.__traceback__, file=f)
+            else:
+                traceback.print_exc(file=f)
     except Exception:
         pass
 
@@ -50,7 +54,8 @@ def main():
             f"系统提示: {str(e)}\n\n"
             f"解决办法:\n"
             f"1. 请在项目根目录下双击运行 'install_laptop.bat' 自动配置环境；\n"
-            f"2. 或在命令行执行: pip install PySide6 -i https://pypi.tuna.tsinghua.edu.cn/simple"
+            f"2. 或在命令行执行: pip install PySide6 -i https://pypi.tuna.tsinghua.edu.cn/simple",
+            exc=e
         )
         sys.exit(1)
 
@@ -63,7 +68,8 @@ def main():
             "缺少核心视觉算法依赖库",
             f"未检测到必要的算法依赖: {str(e)}\n\n"
             f"解决办法:\n"
-            f"请在项目目录下双击运行 'install_laptop.bat' 一键自动安装 PyTorch 与 YOLO 依赖。"
+            f"请在项目目录下双击运行 'install_laptop.bat' 一键自动安装 PyTorch 与 YOLO 依赖。",
+            exc=e
         )
         sys.exit(1)
 
@@ -87,7 +93,8 @@ def main():
     except Exception as e:
         show_fatal_error_dialog(
             "软件运行时异常退出",
-            f"软件在启动或渲染主窗口时捕获到未处理异常:\n\n{str(e)}"
+            f"软件在启动或渲染主窗口时捕获到未处理异常:\n\n{str(e)}",
+            exc=e
         )
         sys.exit(1)
 

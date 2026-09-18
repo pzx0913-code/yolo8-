@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QHeaderView, QTextBrowser, QGroupBox, QMessageBox, QSplitter,
     QFrame, QSizePolicy
 )
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtGui import QImage, QPixmap, QDragEnterEvent, QDropEvent
 
 from core.detector import VehicleDetector
@@ -106,26 +106,28 @@ class CameraWorker(QThread):
 
     def run(self):
         cap = cv2.VideoCapture(self.cam_index)
-        if not cap.isOpened():
-            self.error_occurred.emit(f"无法启动索引为 {self.cam_index} 的摄像头设备")
-            return
+        try:
+            if not cap.isOpened():
+                self.error_occurred.emit(f"无法启动索引为 {self.cam_index} 的摄像头设备，请确认摄像头未被占用。")
+                return
 
-        self.running = True
-        while self.running:
-            ret, frame = cap.read()
-            if not ret:
-                break
+            self.running = True
+            while self.running:
+                ret, frame = cap.read()
+                if not ret:
+                    self.error_occurred.emit("摄像头视频流读取中断或画面获取失败。")
+                    break
 
-            annotated_frame, detections, time_ms = self.detector.predict_image(frame, conf=self.conf)
+                annotated_frame, detections, time_ms = self.detector.predict_image(frame, conf=self.conf)
 
-            h, w, ch = annotated_frame.shape
-            bytes_per_line = ch * w
-            rgb_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
-            q_img = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888).copy()
+                h, w, ch = annotated_frame.shape
+                bytes_per_line = ch * w
+                rgb_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
+                q_img = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888).copy()
 
-            self.frame_ready.emit(q_img, detections, time_ms, annotated_frame)
-
-        cap.release()
+                self.frame_ready.emit(q_img, detections, time_ms, annotated_frame)
+        finally:
+            cap.release()
 
     def stop(self):
         self.running = False
@@ -147,6 +149,12 @@ class MainWindow(QMainWindow):
         self.cam_worker = None
         self._current_wiki_cls = None
         self._user_selected_cls = None
+
+        # 置信度滑块防抖定时器 (150ms，避免拖动滑块时频繁阻塞主线程)
+        self.slider_timer = QTimer(self)
+        self.slider_timer.setSingleShot(True)
+        self.slider_timer.setInterval(150)
+        self.slider_timer.timeout.connect(self._on_debounced_conf_apply)
 
         self._init_ui()
         self._load_stylesheet()
@@ -351,14 +359,25 @@ class MainWindow(QMainWindow):
             self, "选择模型权重", "weights", "YOLO Weights (*.pt)"
         )
         if file_path:
+            # 若摄像头正在运行，先优雅停止，避免模型热切换引发并发推理崩溃
+            was_cam_running = bool(self.cam_worker and self.cam_worker.isRunning())
+            if was_cam_running:
+                self._stop_camera_if_running()
+
             try:
                 self.detector.load_model(file_path)
                 self.lbl_model_badge.setText(f"模型: {os.path.basename(file_path)}")
                 QMessageBox.information(self, "切换成功", f"成功载入新权重:\n{os.path.basename(file_path)}")
-                if self.current_raw_img_path and not (self.cam_worker and self.cam_worker.isRunning()):
+
+                # 恢复之前的工作状态
+                if was_cam_running:
+                    self._start_camera()
+                elif self.current_raw_img_path:
                     self._process_single_image(self.current_raw_img_path)
             except Exception as e:
                 QMessageBox.critical(self, "错误", f"载入权重失败: {str(e)}")
+                if was_cam_running:
+                    self._start_camera()
 
     def _on_conf_changed(self, value):
         self.lbl_conf_val.setText(f"{value}%")
@@ -367,6 +386,12 @@ class MainWindow(QMainWindow):
         if self.cam_worker and self.cam_worker.isRunning():
             self.cam_worker.set_conf(conf)
         elif self.current_raw_img_path:
+            # 重启防抖计时器，避免连续拖动阻塞主线程
+            self.slider_timer.start()
+
+    def _on_debounced_conf_apply(self):
+        if self.current_raw_img_path and not (self.cam_worker and self.cam_worker.isRunning()):
+            conf = self.slider_conf.value() / 100.0
             self._process_single_image(self.current_raw_img_path, conf=conf)
 
     def _on_open_image(self):
@@ -542,6 +567,7 @@ class MainWindow(QMainWindow):
         self.cam_worker = CameraWorker(self.detector, cam_index=0, conf=conf)
         self.cam_worker.frame_ready.connect(self._on_cam_frame_ready)
         self.cam_worker.error_occurred.connect(self._on_cam_error)
+        self.cam_worker.finished.connect(self._on_cam_finished)
         self.cam_worker.start()
 
         self.btn_toggle_cam.setText("停止摄像头")
@@ -559,18 +585,30 @@ class MainWindow(QMainWindow):
         fps = 1000.0 / time_ms if time_ms > 0 else 0
         self.lbl_perf_badge.setText(f"{time_ms:.1f} ms · {fps:.0f} FPS")
 
+    def _reset_camera_ui_state(self, status_text: str = "摄像头已关闭"):
+        self.btn_toggle_cam.setText("开启摄像头")
+        self.btn_toggle_cam.setObjectName("btnSecondary")
+        self.btn_toggle_cam.setStyle(self.btn_toggle_cam.style())
+        self.lbl_status_summary.setText(status_text)
+
+    def _on_cam_finished(self):
+        self._reset_camera_ui_state()
+        self.cam_worker = None
+
     def _on_cam_error(self, err_msg: str):
+        self._reset_camera_ui_state("摄像头异常关闭")
+        if self.cam_worker:
+            if self.cam_worker.isRunning():
+                self.cam_worker.stop()
+            self.cam_worker = None
         QMessageBox.warning(self, "摄像头错误", err_msg)
-        self._stop_camera_if_running()
 
     def _stop_camera_if_running(self):
-        if self.cam_worker and self.cam_worker.isRunning():
-            self.cam_worker.stop()
+        if self.cam_worker:
+            if self.cam_worker.isRunning():
+                self.cam_worker.stop()
             self.cam_worker = None
-            self.btn_toggle_cam.setText("开启摄像头")
-            self.btn_toggle_cam.setObjectName("btnSecondary")
-            self.btn_toggle_cam.setStyle(self.btn_toggle_cam.style())
-            self.lbl_status_summary.setText("摄像头已关闭")
+        self._reset_camera_ui_state("摄像头已关闭")
 
     def _on_save_result(self):
         if self.current_annotated_bgr is None:

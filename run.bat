@@ -10,17 +10,31 @@ if exist "%~dp0.venv\Scripts\python.exe" (
     "%~dp0.venv\Scripts\python.exe" -c "import PySide6" >nul 2>&1 && set "PY=%~dp0.venv\Scripts\python.exe"
 )
 
-:: Priority 2: Sibling environment (..\plant_yolo_env)
+:: Priority 2: Sibling vehicle environment (..\qiche_yolo_env or ..\vehicle_yolo_env)
+if not defined PY if exist "..\qiche_yolo_env\Scripts\python.exe" (
+    "..\qiche_yolo_env\Scripts\python.exe" -c "import PySide6" >nul 2>&1 && set "PY=..\qiche_yolo_env\Scripts\python.exe"
+)
+if not defined PY if exist "..\vehicle_yolo_env\Scripts\python.exe" (
+    "..\vehicle_yolo_env\Scripts\python.exe" -c "import PySide6" >nul 2>&1 && set "PY=..\vehicle_yolo_env\Scripts\python.exe"
+)
+
+:: Priority 3: Fixed desktop path (D:\AI\qiche_yolo_env or D:\AI\vehicle_yolo_env)
+if not defined PY if exist "D:\AI\qiche_yolo_env\Scripts\python.exe" (
+    "D:\AI\qiche_yolo_env\Scripts\python.exe" -c "import PySide6" >nul 2>&1 && set "PY=D:\AI\qiche_yolo_env\Scripts\python.exe"
+)
+if not defined PY if exist "D:\AI\vehicle_yolo_env\Scripts\python.exe" (
+    "D:\AI\vehicle_yolo_env\Scripts\python.exe" -c "import PySide6" >nul 2>&1 && set "PY=D:\AI\vehicle_yolo_env\Scripts\python.exe"
+)
+
+:: Priority 4: Legacy environment (plant_yolo_env backward compatibility)
 if not defined PY if exist "..\plant_yolo_env\Scripts\python.exe" (
     "..\plant_yolo_env\Scripts\python.exe" -c "import PySide6" >nul 2>&1 && set "PY=..\plant_yolo_env\Scripts\python.exe"
 )
-
-:: Priority 3: Fixed desktop path (D:\AI\plant_yolo_env)
 if not defined PY if exist "D:\AI\plant_yolo_env\Scripts\python.exe" (
     "D:\AI\plant_yolo_env\Scripts\python.exe" -c "import PySide6" >nul 2>&1 && set "PY=D:\AI\plant_yolo_env\Scripts\python.exe"
 )
 
-:: Priority 4: System PATH python
+:: Priority 5: System PATH python
 if not defined PY (
     python -c "import PySide6" >nul 2>&1 && set "PY=python"
 )
@@ -29,6 +43,10 @@ if not defined PY (
 if not defined PY (
     if exist "%~dp0.venv\Scripts\python.exe" (
         set "PY=%~dp0.venv\Scripts\python.exe"
+    ) else if exist "..\qiche_yolo_env\Scripts\python.exe" (
+        set "PY=..\qiche_yolo_env\Scripts\python.exe"
+    ) else if exist "D:\AI\qiche_yolo_env\Scripts\python.exe" (
+        set "PY=D:\AI\qiche_yolo_env\Scripts\python.exe"
     ) else if exist "D:\AI\plant_yolo_env\Scripts\python.exe" (
         set "PY=D:\AI\plant_yolo_env\Scripts\python.exe"
     ) else (
