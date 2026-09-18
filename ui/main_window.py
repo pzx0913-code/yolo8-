@@ -704,6 +704,16 @@ class MainWindow(QMainWindow):
         if not save_path:
             return
 
+        # 检查是否缺失扩展名，若未输入则根据用户在下拉框选中的格式过滤器智能补齐
+        ext = os.path.splitext(save_path)[1].lower()
+        if not ext:
+            if "png" in selected_filter.lower():
+                save_path += ".png"
+            elif "csv" in selected_filter.lower():
+                save_path += ".csv"
+            else:
+                save_path += ".jpg"
+
         if save_path.lower().endswith(".csv") or "csv" in selected_filter.lower():
             if not save_path.lower().endswith(".csv"):
                 save_path += ".csv"
