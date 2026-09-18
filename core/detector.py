@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-YOLO 检测引擎封装
-支持图片、视频及实时摄像头画面的目标检测，并自动统计硬件加速推理耗时。
+YOLO 车辆检测引擎封装
+支持图片、视频及实时摄像头画面的多车型目标检测，并自动统计硬件加速推理耗时。
 """
 
 import os
@@ -12,8 +12,16 @@ import numpy as np
 from ultralytics import YOLO
 
 
-class PlantDetector:
-    def __init__(self, model_path: str = "weights/yolov8n.pt"):
+class VehicleDetector:
+    def __init__(self, model_path: str = None):
+        if model_path is None:
+            if os.path.exists("weights/best_car.pt"):
+                model_path = "weights/best_car.pt"
+            elif os.path.exists("weights/best_plant.pt"):
+                model_path = "weights/best_plant.pt"
+            else:
+                model_path = "weights/yolov8n.pt"
+
         self.model_path = model_path
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.model = None
@@ -22,19 +30,15 @@ class PlantDetector:
 
     def load_model(self, model_path: str):
         """加载或热切换模型权重，支持缺失自动补全恢复"""
-        # 如果指定路径不存在
         if not os.path.exists(model_path):
-            # 自动创建 weights 目录
             target_dir = os.path.dirname(os.path.abspath(model_path))
             if target_dir:
                 os.makedirs(target_dir, exist_ok=True)
             
-            # 如果是基底权重，自动调用官方下载机制
             print(f"[*] 提示: 本地未找到 {model_path}，正在自动准备官方预训练底模...")
             self.model = YOLO("yolov8n.pt")
             self.model_path = model_path
             
-            # 若生成了本地 yolov8n.pt 且目标在 weights 下，自动同步过去
             if os.path.exists("yolov8n.pt") and not os.path.exists(model_path):
                 try:
                     import shutil
@@ -91,3 +95,7 @@ class PlantDetector:
                 })
 
         return annotated_frame, detections, self.last_inference_time
+
+
+# 保持向后兼容性别名
+PlantDetector = VehicleDetector

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-YOLO 植物识别系统 - 笔记本/新设备环境一键自动安装配置脚本
+YOLO 车辆识别与车型检测系统 - 笔记本/新设备环境一键自动安装配置脚本
 通过 Python 原生执行环境创建与依赖安装，彻底避免 Windows CMD 编码乱码与语法截断问题。
 """
 import os
@@ -32,7 +32,7 @@ def run_cmd(cmd_list, desc: str = ""):
     return True
 
 def main():
-    print_header("YOLO 植物识别系统 - 环境一键安装向导")
+    print_header("YOLO 智能车辆识别系统 - 环境一键安装向导")
     print(f"项目目录: {PROJECT_DIR}", flush=True)
     print(f"当前 Python 版本: {sys.version.split()[0]} ({sys.executable})\n", flush=True)
 

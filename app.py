@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-YOLO 植物识别软件 - 桌面客户端启动入口
+YOLO 汽车与车辆识别软件 - 桌面客户端启动入口
 运行命令:
     python app.py
 """
@@ -26,8 +26,8 @@ def main():
     )
 
     app = QApplication(sys.argv)
-    app.setApplicationName("YOLO 植物识别监测系统")
-    app.setOrganizationName("PlantAI")
+    app.setApplicationName("YOLO 智能车辆检测分析系统")
+    app.setOrganizationName("VehicleAI")
 
     window = MainWindow()
     window.show()

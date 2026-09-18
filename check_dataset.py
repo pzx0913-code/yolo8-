@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-植物数据集健康度检查与自检工具
-用于在训练前检查 dataset/ 目录下的图片、标注文件及 data.yaml 是否规范完整。
+车辆数据集健康度检查与自检工具
+用于在训练前检查 dataset/ 目录下的车辆图片、标注文件及 data.yaml 是否规范完整。
 
 运行方式:
     python check_dataset.py
@@ -16,7 +16,7 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 def check_dataset(dataset_dir="dataset"):
     print("=" * 60)
-    print("[*] 正在检查植物数据集配置与完整性...")
+    print("[*] 正在检查车辆目标检测数据集配置与完整性...")
     print("=" * 60)
 
     if not os.path.exists(dataset_dir):

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-YOLO 植物识别系统 - 响应式主界面
+YOLO 智能车辆检测与车型分析系统 - 响应式主界面
 具备原生深色标题栏、平滑图像自适应缩放、多平台显卡动态适配与排版优化。
 """
 
@@ -20,8 +20,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QImage, QPixmap, QDragEnterEvent, QDropEvent
 
-from core.detector import PlantDetector
-from core.plant_wiki import get_plant_wiki
+from core.detector import VehicleDetector
+from core.car_wiki import get_vehicle_wiki
 
 
 def enable_windows_dark_title_bar(window: QMainWindow):
@@ -94,7 +94,7 @@ class CameraWorker(QThread):
     frame_ready = Signal(QImage, list, float, object)
     error_occurred = Signal(str)
 
-    def __init__(self, detector: PlantDetector, cam_index: int = 0, conf: float = 0.25):
+    def __init__(self, detector: VehicleDetector, cam_index: int = 0, conf: float = 0.25):
         super().__init__()
         self.detector = detector
         self.cam_index = cam_index
@@ -135,13 +135,12 @@ class CameraWorker(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("YOLO 植物识别与监测系统")
+        self.setWindowTitle("YOLO 智能汽车与车型识别系统")
         self.resize(1260, 780)
         self.setMinimumSize(980, 620)
         self.setAcceptDrops(True)
 
-        default_model = "weights/best_plant.pt" if os.path.exists("weights/best_plant.pt") else "weights/yolov8n.pt"
-        self.detector = PlantDetector(default_model)
+        self.detector = VehicleDetector()
 
         self.current_raw_img_path = None
         self.current_annotated_bgr = None
@@ -174,9 +173,9 @@ class MainWindow(QMainWindow):
 
         title_box = QHBoxLayout()
         title_box.setSpacing(8)
-        self.lbl_title = QLabel("YOLO 智能植物识别系统")
+        self.lbl_title = QLabel("YOLO 智能车辆检测系统")
         self.lbl_title.setObjectName("appTitle")
-        lbl_version = QLabel("v1.0")
+        lbl_version = QLabel("v2.0")
         lbl_version.setObjectName("badgeVersion")
         title_box.addWidget(self.lbl_title)
         title_box.addWidget(lbl_version)
@@ -266,7 +265,7 @@ class MainWindow(QMainWindow):
 
         splitter.addWidget(left_box)
 
-        # === 右侧控制与大百科面板 ===
+        # === 右侧控制与车辆特征面板 ===
         right_box = QWidget()
         right_box.setMinimumWidth(460)
         right_layout = QVBoxLayout(right_box)
@@ -292,12 +291,12 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(grp_conf)
 
         # 卡片 2: 检测目标列表
-        grp_results = QGroupBox("检测目标列表")
+        grp_results = QGroupBox("车辆检测清单")
         res_layout = QVBoxLayout(grp_results)
         res_layout.setContentsMargins(8, 8, 8, 8)
 
         self.table_res = QTableWidget(0, 3)
-        self.table_res.setHorizontalHeaderLabels(["植物类别", "置信度", "定位坐标"])
+        self.table_res.setHorizontalHeaderLabels(["车型 / 类别", "置信度", "目标定位坐标 (XYXY)"])
         self.table_res.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.table_res.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.table_res.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
@@ -307,8 +306,8 @@ class MainWindow(QMainWindow):
         res_layout.addWidget(self.table_res)
         right_layout.addWidget(grp_results, stretch=1)
 
-        # 卡片 3: 植物百科卡片
-        grp_wiki = QGroupBox("植物百科与养护指南")
+        # 卡片 3: 车辆知识与规格特征卡片
+        grp_wiki = QGroupBox("车辆规格与车型特征卡片")
         wiki_layout = QVBoxLayout(grp_wiki)
         wiki_layout.setContentsMargins(10, 10, 10, 10)
 
@@ -326,8 +325,8 @@ class MainWindow(QMainWindow):
     def _set_placeholder_text(self):
         self.lbl_display.setText(
             "<div style='text-align: center; color: #475569; padding: 24px;'>"
-            "<p style='font-size: 16px; font-weight: 600; color: #94A3B8; margin-bottom: 6px;'>点击【打开图片】或将植物照片拖放至此处</p>"
-            "<p style='font-size: 13px; color: #64748B;'>支持 JPG / PNG / WEBP 等常见格式 · 支持摄像头实时检测</p>"
+            "<p style='font-size: 16px; font-weight: 600; color: #94A3B8; margin-bottom: 6px;'>点击【打开图片】或将车辆照片/交通路况图像拖放至此处</p>"
+            "<p style='font-size: 13px; color: #64748B;'>支持 JPG / PNG / WEBP 等常见格式 · 支持车载及路口摄像头实时推流分析</p>"
             "</div>"
         )
 
@@ -335,8 +334,8 @@ class MainWindow(QMainWindow):
         self._current_wiki_cls = None
         self.txt_wiki.setHtml(
             "<div style='color: #64748B; padding: 24px; text-align: center; line-height: 1.8;'>"
-            "<p style='font-size: 16px; color: #94A3B8; margin-bottom: 8px;'>暂未选中植物目标</p>"
-            "<p style='font-size: 13px; color: #64748B;'>导入图片或开启摄像头后，点击上方列表中的植物名称，<br>此处将以卡片呈现对应的<b>学名、日照、浇水与养护要点</b>。</p>"
+            "<p style='font-size: 16px; color: #94A3B8; margin-bottom: 8px;'>暂未选中车辆目标</p>"
+            "<p style='font-size: 13px; color: #64748B;'>导入图片或开启摄像头后，点击上方列表中的车辆条目，<br>此处将以卡片呈现对应的<b>车型划分、动力构型、车身结构及安全行车参数</b>。</p>"
             "</div>"
         )
 
@@ -372,7 +371,7 @@ class MainWindow(QMainWindow):
 
     def _on_open_image(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "选择植物图片", "", "图片文件 (*.jpg *.png *.jpeg *.bmp *.webp)"
+            self, "选择车辆图片", "", "图片文件 (*.jpg *.png *.jpeg *.bmp *.webp)"
         )
         if file_path:
             self._process_single_image(file_path)
@@ -405,7 +404,7 @@ class MainWindow(QMainWindow):
 
             fps = 1000.0 / time_ms if time_ms > 0 else 0
             self.lbl_perf_badge.setText(f"{time_ms:.1f} ms · {fps:.0f} FPS")
-            self.lbl_status_summary.setText(f"目标: {len(detections)} 个 | {annotated_frame.shape[1]}x{annotated_frame.shape[0]}")
+            self.lbl_status_summary.setText(f"目标: {len(detections)} 辆/处 | {annotated_frame.shape[1]}x{annotated_frame.shape[0]}")
         except Exception as e:
             QMessageBox.critical(self, "检测失败", f"推理过程出错: {str(e)}")
 
@@ -419,14 +418,19 @@ class MainWindow(QMainWindow):
 
     def _update_results_table(self, detections: list):
         self.table_res.setRowCount(0)
-        plant_row_to_focus = None
+        vehicle_row_to_focus = None
         user_selected_row = None
+
+        vehicle_priority_classes = [
+            "car", "suv", "bus", "truck", "motorcycle", "van", "mpv",
+            "sports car", "pickup", "bicycle", "traffic light", "stop sign"
+        ]
 
         for row, det in enumerate(detections):
             self.table_res.insertRow(row)
 
             cls_name = det["class_name"]
-            wiki = get_plant_wiki(cls_name)
+            wiki = get_vehicle_wiki(cls_name)
             display_name = f"{wiki['cn_name']} ({cls_name})"
             item_name = QTableWidgetItem(display_name)
             item_name.setData(Qt.UserRole, cls_name)
@@ -435,7 +439,7 @@ class MainWindow(QMainWindow):
             item_conf = QTableWidgetItem(f"{conf_val:.1f}%")
             item_conf.setTextAlignment(Qt.AlignCenter)
             if conf_val >= 60:
-                item_conf.setForeground(Qt.green)
+                item_conf.setForeground(Qt.cyan)
 
             box_str = f"[{det['box'][0]}, {det['box'][1]}, {det['box'][2]}, {det['box'][3]}]"
             item_box = QTableWidgetItem(box_str)
@@ -448,19 +452,19 @@ class MainWindow(QMainWindow):
             if self._user_selected_cls and cls_name.lower() == self._user_selected_cls.lower():
                 user_selected_row = row
 
-            if plant_row_to_focus is None and cls_name.lower() in ["potted plant", "plant", "flower", "rose", "succulent", "monstera", "alocasia"]:
-                plant_row_to_focus = row
+            if vehicle_row_to_focus is None and cls_name.lower() in vehicle_priority_classes:
+                vehicle_row_to_focus = row
 
         if len(detections) > 0:
             if user_selected_row is not None:
                 target_row = user_selected_row
-            elif plant_row_to_focus is not None:
-                target_row = plant_row_to_focus
+            elif vehicle_row_to_focus is not None:
+                target_row = vehicle_row_to_focus
             else:
                 target_row = 0
             self.table_res.selectRow(target_row)
             selected_cls = self.table_res.item(target_row, 0).data(Qt.UserRole)
-            self._show_plant_wiki(selected_cls)
+            self._show_vehicle_wiki(selected_cls)
         else:
             self._reset_wiki_placeholder()
 
@@ -469,48 +473,60 @@ class MainWindow(QMainWindow):
         if item:
             raw_cls = item.data(Qt.UserRole)
             self._user_selected_cls = raw_cls
-            self._show_plant_wiki(raw_cls, force=True)
+            self._show_vehicle_wiki(raw_cls, force=True)
 
-    def _show_plant_wiki(self, class_name: str, force: bool = False):
+    def _show_vehicle_wiki(self, class_name: str, force: bool = False):
         if not force and class_name == self._current_wiki_cls:
             return
         self._current_wiki_cls = class_name
-        wiki = get_plant_wiki(class_name)
+        wiki = get_vehicle_wiki(class_name)
         html = f"""
         <div style='line-height: 1.7; font-size: 14px;'>
             <div style='margin-bottom: 8px;'>
-                <span style='font-size: 22px; font-weight: bold; color: #10B981;'>{wiki['cn_name']}</span>
-                <span style='color: #64748B; font-size: 13px; margin-left: 10px;'>学名: <i>{wiki['scientific_name']}</i></span>
+                <span style='font-size: 20px; font-weight: bold; color: #38BDF8;'>{wiki['cn_name']}</span>
+                <span style='color: #64748B; font-size: 13px; margin-left: 10px;'>标识: <i>{wiki['en_name']}</i></span>
             </div>
             <div style='color: #94A3B8; font-size: 13px; margin-bottom: 10px;'>
                 <b>分类归属：</b><span style='color: #CBD5E1;'>{wiki['category']}</span>
+            </div>
+            <div style='color: #94A3B8; font-size: 13px; margin-bottom: 10px;'>
+                <b>牌照准驾：</b><span style='color: #60A5FA;'>{wiki['license_plate']}</span>
             </div>
             
             <hr style='border: none; border-top: 1px solid #1E293B; margin: 8px 0;'>
             
             <div style='background-color: #1E293B; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;'>
-                <p style='margin: 4px 0; font-size: 14px;'>
-                    <b style='color: #F59E0B;'>光照需求：</b>
-                    <span style='color: #F8FAFC;'>{wiki['sunlight']}</span>
+                <p style='margin: 4px 0; font-size: 13px;'>
+                    <b style='color: #38BDF8;'>动力驱动：</b>
+                    <span style='color: #F8FAFC;'>{wiki['powertrain']}</span>
                 </p>
-                <p style='margin: 4px 0; font-size: 14px;'>
-                    <b style='color: #38BDF8;'>水分浇灌：</b>
-                    <span style='color: #F8FAFC;'>{wiki['watering']}</span>
+                <p style='margin: 4px 0; font-size: 13px;'>
+                    <b style='color: #F59E0B;'>尺寸规格：</b>
+                    <span style='color: #F8FAFC;'>{wiki['dimensions']}</span>
                 </p>
             </div>
 
             <div style='margin-bottom: 10px;'>
-                <p style='margin: 3px 0; font-size: 15px; font-weight: bold; color: #94A3B8;'>植物特性：</p>
-                <p style='margin: 2px 0; color: #E2E8F0; font-size: 14px; line-height: 1.6;'>{wiki['description']}</p>
+                <p style='margin: 3px 0; font-size: 14px; font-weight: bold; color: #94A3B8;'>典型场景与路况：</p>
+                <p style='margin: 2px 0; color: #E2E8F0; font-size: 13px; line-height: 1.6;'>{wiki['scenario']}</p>
+            </div>
+
+            <div style='margin-bottom: 10px;'>
+                <p style='margin: 3px 0; font-size: 14px; font-weight: bold; color: #60A5FA;'>车身构造与技术特性：</p>
+                <p style='margin: 2px 0; color: #DBEAFE; font-size: 13px; line-height: 1.6;'>{wiki['tech_features']}</p>
             </div>
 
             <div>
-                <p style='margin: 3px 0; font-size: 15px; font-weight: bold; color: #34D399;'>养护要点：</p>
-                <p style='margin: 2px 0; color: #A7F3D0; font-size: 14px; line-height: 1.6;'>{wiki['tips']}</p>
+                <p style='margin: 3px 0; font-size: 14px; font-weight: bold; color: #34D399;'>安全驾驶与通行规程：</p>
+                <p style='margin: 2px 0; color: #A7F3D0; font-size: 13px; line-height: 1.6;'>{wiki['safety_tips']}</p>
             </div>
         </div>
         """
         self.txt_wiki.setHtml(html)
+
+    # 保持向后兼容方法
+    def _show_plant_wiki(self, class_name: str, force: bool = False):
+        self._show_vehicle_wiki(class_name, force=force)
 
     # --- 摄像头流控制 ---
     def _on_toggle_camera(self):
@@ -560,7 +576,7 @@ class MainWindow(QMainWindow):
             return
 
         save_path, _ = QFileDialog.getSaveFileName(
-            self, "保存检测结果", "plant_result.jpg", "JPEG Image (*.jpg);;PNG Image (*.png)"
+            self, "保存检测结果", "car_detection_result.jpg", "JPEG Image (*.jpg);;PNG Image (*.png)"
         )
         if save_path:
             ok = imwrite_unicode(save_path, self.current_annotated_bgr)

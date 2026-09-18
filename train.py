@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-YOLO 植物模型一键训练脚本
-支持 GPU/CPU 硬件加速自适应，支持自定义数据集训练并自动提取输出 best_plant.pt。
+YOLO 汽车与车型检测模型一键训练脚本
+支持 GPU/CPU 硬件加速自适应，支持自定义车辆数据集训练并自动提取输出 best_car.pt。
 
 运行方式:
     python train.py --epochs 50 --batch 16
@@ -18,13 +18,13 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 def train(data_yaml="dataset/data.yaml", epochs=50, batch_size=16, base_model="weights/yolov8n.pt"):
     print("=" * 60)
-    print("[*] 启动 YOLO 模型训练流程")
+    print("[*] 启动 YOLO 车辆目标检测模型训练流程")
     print("=" * 60)
 
     # 1. 检查数据配置文件
     if not os.path.exists(data_yaml):
         print(f"[!] 错误: 未在 '{data_yaml}' 找到数据集配置文件！")
-        print("    请确保已将植物数据集放入 dataset/ 目录，并配置好 data.yaml。")
+        print("    请确保已将车辆数据集放入 dataset/ 目录，并配置好 data.yaml。")
         return False
 
     # 2. 检查显卡与算力设备
@@ -55,31 +55,31 @@ def train(data_yaml="dataset/data.yaml", epochs=50, batch_size=16, base_model="w
         device=device,
         workers=num_workers,
         project="runs/detect",
-        name="plant_train",
+        name="car_train",
         exist_ok=True,
         plots=True
     )
 
     # 5. 自动提取最佳权重至 weights/ 目录
-    best_pt = os.path.join("runs", "detect", "plant_train", "weights", "best.pt")
-    target_pt = os.path.join("weights", "best_plant.pt")
+    best_pt = os.path.join("runs", "detect", "car_train", "weights", "best.pt")
+    target_pt = os.path.join("weights", "best_car.pt")
 
     if os.path.exists(best_pt):
         os.makedirs("weights", exist_ok=True)
         shutil.copy(best_pt, target_pt)
         print("=" * 60)
-        print(f"[OK] 模型训练完成！")
+        print(f"[OK] 车辆检测模型训练完成！")
         print(f"[OK] 最优权重已同步至: {os.path.abspath(target_pt)}")
-        print(f"[OK] 软件启动时 (python app.py) 将自动优先加载该专属植物模型。")
+        print(f"[OK] 软件启动时 (python app.py) 将自动优先加载该专属汽车检测模型。")
         print("=" * 60)
         return True
     else:
-        print("[!] 提示: 训练完成，但未在预期路径找到 best.pt，请检查 runs/detect/plant_train 目录。")
+        print("[!] 提示: 训练完成，但未在预期路径找到 best.pt，请检查 runs/detect/car_train 目录。")
         return False
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="YOLO 植物模型训练")
+    parser = argparse.ArgumentParser(description="YOLO 汽车模型训练")
     parser.add_argument("--data", type=str, default="dataset/data.yaml", help="数据集配置文件路径")
     parser.add_argument("--epochs", type=int, default=50, help="训练轮数 (推荐 50~100)")
     parser.add_argument("--batch", type=int, default=16, help="Batch Size (推荐 16 或 32)")
