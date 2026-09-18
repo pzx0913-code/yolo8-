@@ -14,13 +14,20 @@ from ultralytics import YOLO
 
 class VehicleDetector:
     def __init__(self, model_path: str = None):
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        weights_dir = os.path.join(base_dir, "weights")
+
         if model_path is None:
-            if os.path.exists("weights/best_car.pt"):
-                model_path = "weights/best_car.pt"
-            elif os.path.exists("weights/best_plant.pt"):
-                model_path = "weights/best_plant.pt"
+            car_pt = os.path.join(weights_dir, "best_car.pt")
+            base_pt = os.path.join(weights_dir, "yolov8n.pt")
+            if os.path.exists(car_pt):
+                model_path = car_pt
+            elif os.path.exists(base_pt):
+                model_path = base_pt
+            elif os.path.exists("weights/yolov8n.pt"):
+                model_path = os.path.abspath("weights/yolov8n.pt")
             else:
-                model_path = "weights/yolov8n.pt"
+                model_path = base_pt
 
         self.model_path = model_path
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
