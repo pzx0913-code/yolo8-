@@ -45,8 +45,9 @@ def show_fatal_error_dialog(title: str, message: str, exc: BaseException = None)
 
 def main():
     try:
-        from PySide6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication, QSplashScreen
         from PySide6.QtCore import Qt
+        from PySide6.QtGui import QPixmap, QPainter, QColor, QFont
     except ImportError as e:
         show_fatal_error_dialog(
             "缺少图形界面依赖库 (PySide6)",
@@ -59,11 +60,44 @@ def main():
         )
         sys.exit(1)
 
+    # 启用高分屏清晰渲染
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
+
+    app = QApplication(sys.argv)
+    app.setApplicationName("YOLO 智能车辆检测分析系统")
+    app.setOrganizationName("VehicleAI")
+
+    # 立即弹出轻量启动画面，消除用户等待时的界面真空感
+    splash_pix = QPixmap(440, 200)
+    splash_pix.fill(QColor('#0F172A'))
+    p = QPainter(splash_pix)
+    p.setPen(QColor('#1E293B'))
+    p.drawRect(0, 0, 439, 199)
+
+    p.setFont(QFont('Microsoft YaHei', 14, QFont.Bold))
+    p.setPen(QColor('#38BDF8'))
+    p.drawText(24, 62, 'YOLO 智能车辆检测分析系统')
+
+    p.setFont(QFont('Microsoft YaHei', 10))
+    p.setPen(QColor('#94A3B8'))
+    p.drawText(24, 112, '正在初始化 AI 视觉内核与硬件算力...')
+
+    p.setPen(QColor('#64748B'))
+    p.drawText(24, 152, 'NVIDIA RTX 独显与模型引擎快速预热中...')
+    p.end()
+
+    splash = QSplashScreen(splash_pix, Qt.WindowStaysOnTopHint)
+    splash.show()
+    app.processEvents()
+
     try:
         import torch
         import ultralytics
         import cv2
     except ImportError as e:
+        splash.close()
         show_fatal_error_dialog(
             "缺少核心视觉算法依赖库",
             f"未检测到必要的算法依赖: {str(e)}\n\n"
@@ -76,21 +110,14 @@ def main():
     try:
         from ui.main_window import MainWindow
 
-        # 启用高分屏清晰渲染
-        QApplication.setHighDpiScaleFactorRoundingPolicy(
-            Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
-        )
-
-        app = QApplication(sys.argv)
-        app.setApplicationName("YOLO 智能车辆检测分析系统")
-        app.setOrganizationName("VehicleAI")
-
         window = MainWindow()
         window.show()
+        splash.finish(window)
 
         sys.exit(app.exec())
 
     except Exception as e:
+        splash.close()
         show_fatal_error_dialog(
             "软件运行时异常退出",
             f"软件在启动或渲染主窗口时捕获到未处理异常:\n\n{str(e)}",

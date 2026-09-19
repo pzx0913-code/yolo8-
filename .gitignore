@@ -37,3 +37,4 @@ qiche_yolo_env/
 .DS_Store
 Thumbs.db
 *.swp
+*.lnk

@@ -62,8 +62,17 @@ class VehicleDetector:
             else:
                 self.model_path = model_path
                 self.model = YOLO(model_path)
-
             print(f"[*] 成功加载模型: {self.model_path}，推理计算设备: {self.device}")
+            self._warmup()
+
+    def _warmup(self):
+        """预热显存与推理上下文，消除用户首次点击检测时的冷启动卡顿"""
+        try:
+            if self.model is not None and str(self.device).startswith("cuda"):
+                dummy = torch.zeros((1, 3, 640, 640), device=self.device)
+                self.model.predict(dummy, device=self.device, verbose=False)
+        except Exception:
+            pass
 
     def predict_image(self, image_input, conf: float = 0.25):
         """
