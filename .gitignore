@@ -12,8 +12,11 @@ runs/
 # 数据集中的大图文件 (保留配置模板即可)
 dataset/images/
 dataset/labels/
+dataset/train/
+dataset/valid/
 *.zip
 *.tar.gz
+*.bak
 
 # 测试临时图片
 bus.jpg
