@@ -315,11 +315,13 @@ class MainWindow(QMainWindow):
         conf_layout.setContentsMargins(10, 8, 10, 8)
         slider_row = QHBoxLayout()
         self.slider_conf = QSlider(Qt.Horizontal)
-        self.slider_conf.setRange(10, 95)
-        self.slider_conf.setValue(25)
+        self.slider_conf.setRange(5, 95)
+        # 针对 196 类超精细多分类模型，初学阶段置信度较分散，默认设为 10%
+        init_conf = 10 if (hasattr(self.detector, "model") and self.detector.model and len(self.detector.model.names) > 80) else 25
+        self.slider_conf.setValue(init_conf)
         self.slider_conf.valueChanged.connect(self._on_conf_changed)
 
-        self.lbl_conf_val = QLabel("25%")
+        self.lbl_conf_val = QLabel(f"{init_conf}%")
         self.lbl_conf_val.setObjectName("lblConfVal")
 
         slider_row.addWidget(self.slider_conf)
