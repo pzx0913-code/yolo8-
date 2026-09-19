@@ -62,11 +62,26 @@ def train(data_yaml="dataset/data.yaml", epochs=50, batch_size=16, base_model="w
     )
 
     # 5. 自动提取最佳权重至 weights/ 目录
-    best_pt = os.path.join("runs", "detect", "qiche_train", "weights", "best.pt")
+    save_dir = getattr(results, "save_dir", None)
+    candidates = []
+    if save_dir:
+        candidates.append(os.path.join(str(save_dir), "weights", "best.pt"))
+    candidates.extend([
+        os.path.join("runs", "detect", "runs", "detect", "qiche_train", "weights", "best.pt"),
+        os.path.join("runs", "detect", "qiche_train", "weights", "best.pt"),
+        os.path.join("runs", "detect", "train", "weights", "best.pt"),
+    ])
+
+    best_pt = None
+    for cand in candidates:
+        if os.path.exists(cand):
+            best_pt = cand
+            break
+
     target_pt = os.path.join("weights", "best_qiche.pt")
     alt_target_pt = os.path.join("weights", "best_car.pt")
 
-    if os.path.exists(best_pt):
+    if best_pt and os.path.exists(best_pt):
         os.makedirs("weights", exist_ok=True)
         shutil.copy(best_pt, target_pt)
         shutil.copy(best_pt, alt_target_pt)
