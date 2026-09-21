@@ -300,22 +300,26 @@ BODY_TYPE_KNOWLEDGE = {
 
 def parse_vehicle_class_name(class_name: str) -> dict:
     """
-    智能解析规整车型名称字符串 (如 'Ferrari 458 Italia Coupe 2012')
-    返回解构字典: brand, model, body_type, year
+    智能解析规整车型名称字符串 (如 'Ferrari 458 Italia Coupe 2012', 'BMW_3_Series_2012', 'Toyota-Camry-2012')
+    返回解构字典: brand, brand_cn, model, body_type, body_type_cn, year
     """
     raw = str(class_name).strip()
     if not raw:
-        return {"brand": "", "model": "", "body_type": "", "year": ""}
+        return {"brand": "", "brand_cn": "", "model": "", "body_type": "", "body_type_cn": "", "year": ""}
 
-    # 1. 提取年份 (通常为尾部的 4 位连续数字，如 2012, 1994, 2008)
+    # 0. 规范化清洗：将下划线、短横线统一转换为标准空格，合并多余连续空白
+    clean_str = re.sub(r"[-_]+", " ", raw)
+    clean_str = re.sub(r"\s+", " ", clean_str).strip()
+
+    # 1. 提取年份 (通常为 4 位连续数字 19xx 或 20xx)
     year = ""
-    year_match = re.search(r"\b(19\d\d|20\d\d)\b", raw)
+    year_match = re.search(r"\b(19\d\d|20\d\d)\b", clean_str)
     if year_match:
         year = year_match.group(1)
         # 从名称中移除年份
-        raw_no_year = re.sub(r"\b(19\d\d|20\d\d)\b", "", raw).strip()
+        raw_no_year = re.sub(r"\b(19\d\d|20\d\d)\b", "", clean_str).strip()
     else:
-        raw_no_year = raw
+        raw_no_year = clean_str
 
     # 2. 优先匹配多词复合品牌，再匹配单词品牌 (长词优先)
     brand = ""
@@ -357,10 +361,25 @@ def parse_vehicle_class_name(class_name: str) -> dict:
     if not model:
         model = brand
 
+    brand_info = BRAND_KNOWLEDGE.get(brand)
+    if not brand_info:
+        for k, v in BRAND_KNOWLEDGE.items():
+            if k.lower() == brand.lower():
+                brand_info = v
+                break
+        else:
+            brand_info = (brand, "国际主流造车阵营", "知名乘用车与商用车制造品牌", "现代乘用底盘与电控系统")
+    brand_cn = brand_info[0]
+
+    body_info = BODY_TYPE_KNOWLEDGE.get(body_type, BODY_TYPE_KNOWLEDGE.get("Sedan", {}))
+    body_type_cn = body_info.get("name", "轿车 / 乘用车").split()[0]
+
     return {
         "brand": brand,
+        "brand_cn": brand_cn,
         "model": model,
         "body_type": body_type or "Sedan",
+        "body_type_cn": body_type_cn,
         "year": year
     }
 
@@ -372,8 +391,10 @@ def synthesize_vehicle_wiki(class_name: str) -> dict:
     """
     parsed = parse_vehicle_class_name(class_name)
     brand_key = parsed["brand"]
+    brand_cn = parsed["brand_cn"]
     model_name = parsed["model"]
     body_key = parsed["body_type"]
+    body_type_cn = parsed["body_type_cn"]
     year_str = parsed["year"]
 
     # 查找品牌知识
@@ -399,7 +420,7 @@ def synthesize_vehicle_wiki(class_name: str) -> dict:
     safety_tips = body_info["safety_tips"]
 
     # 推导动力系统与能源构型
-    lower_name = class_name.lower()
+    lower_name = str(class_name).lower()
     if any(kw in lower_name for kw in ["hybrid", "phev"]):
         powertrain = "智能双模油电混合动力 (HEV/PHEV) · 阿特金森循环引擎 + 高效驱动电机"
     elif any(kw in lower_name for kw in ["ev", "electric"]) or brand_key in ["Tesla", "NIO", "XPeng", "Xiaomi", "Zeekr"]:
@@ -434,6 +455,12 @@ def synthesize_vehicle_wiki(class_name: str) -> dict:
     return {
         "cn_name": cn_title,
         "en_name": class_name,
+        "brand": brand_key,
+        "brand_cn": brand_cn,
+        "model": model_name,
+        "year": year_str if year_str else "-",
+        "body_type": body_key,
+        "body_type_cn": body_type_cn,
         "category": category,
         "license_plate": license_plate,
         "powertrain": powertrain,
@@ -454,7 +481,14 @@ def get_vehicle_wiki(class_name: str) -> dict:
 
     # 1. 通用大类直接精确匹配 (针对 COCO 等原生分类)
     if key in VEHICLE_KNOWLEDGE_BASE:
-        return VEHICLE_KNOWLEDGE_BASE[key]
+        res = VEHICLE_KNOWLEDGE_BASE[key].copy()
+        res.setdefault("brand", "通用交通")
+        res.setdefault("brand_cn", "通用目标")
+        res.setdefault("model", res.get("cn_name", key).split()[0])
+        res.setdefault("year", "-")
+        res.setdefault("body_type", key)
+        res.setdefault("body_type_cn", res.get("cn_name", key).split()[0])
+        return res
 
     # 2. 常见中英文通用别名映射
     alias_map = {
@@ -512,42 +546,62 @@ def get_vehicle_wiki(class_name: str) -> dict:
     if key in alias_map:
         return VEHICLE_KNOWLEDGE_BASE[alias_map[key]]
 
-    # 3. 检查是否为 Stanford Cars 196 类或细分复合车型名称 (如带年份、跑车/轿跑/皮卡等长字符串)
-    # 如果字符串包含空格且长度 > 5，直接交由智能语义解析合成引擎处理
-    if " " in class_name and len(class_name) > 4:
+    # 3. 检查是否为 Stanford Cars 196 类或细分复合车型名称 (如包含空格、下划线、短横线，或命中品牌库)
+    clean_key = re.sub(r"[-_]+", " ", key).strip()
+    if (" " in clean_key and len(clean_key) > 3) or any(b.lower() in clean_key for b in BRAND_KNOWLEDGE):
         try:
             return synthesize_vehicle_wiki(class_name)
         except Exception:
             pass
 
-    # 4. 检查是否命中品牌库中的某个品牌
-    for b_key in BRAND_KNOWLEDGE:
-        if b_key.lower() in key:
-            try:
-                return synthesize_vehicle_wiki(class_name)
-            except Exception:
-                pass
-
-    # 5. 符号规范化匹配
-    normalized = key.replace("_", " ").replace("-", " ")
+    # 4. 符号规范化匹配
+    normalized = clean_key
     if normalized in VEHICLE_KNOWLEDGE_BASE:
-        return VEHICLE_KNOWLEDGE_BASE[normalized]
+        res = VEHICLE_KNOWLEDGE_BASE[normalized].copy()
+        res.setdefault("brand", "通用交通")
+        res.setdefault("brand_cn", "通用交通")
+        res.setdefault("model", res.get("cn_name", normalized).split()[0])
+        res.setdefault("year", "-")
+        res.setdefault("body_type", normalized)
+        res.setdefault("body_type_cn", res.get("cn_name", normalized).split()[0])
+        return res
     if normalized in alias_map:
-        return VEHICLE_KNOWLEDGE_BASE[alias_map[normalized]]
+        target_k = alias_map[normalized]
+        res = VEHICLE_KNOWLEDGE_BASE[target_k].copy()
+        res.setdefault("brand", "通用交通")
+        res.setdefault("brand_cn", "通用交通")
+        res.setdefault("model", res.get("cn_name", target_k).split()[0])
+        res.setdefault("year", "-")
+        res.setdefault("body_type", target_k)
+        res.setdefault("body_type_cn", res.get("cn_name", target_k).split()[0])
+        return res
 
-    # 6. 长词优先的子串包含匹配
+    # 5. 长词优先的子串包含匹配
     sorted_keys = sorted(VEHICLE_KNOWLEDGE_BASE.keys(), key=len, reverse=True)
     for k in sorted_keys:
         if k in normalized:
-            return VEHICLE_KNOWLEDGE_BASE[k]
+            res = VEHICLE_KNOWLEDGE_BASE[k].copy()
+            res.setdefault("brand", "通用交通")
+            res.setdefault("brand_cn", "通用交通")
+            res.setdefault("model", res.get("cn_name", k).split()[0])
+            res.setdefault("year", "-")
+            res.setdefault("body_type", k)
+            res.setdefault("body_type_cn", res.get("cn_name", k).split()[0])
+            return res
 
-    # 7. 智能合成兜底（将未知词也作为车型名称尝试提取）
+    # 6. 智能合成兜底（将未知词也作为车型名称尝试提取）
     try:
         return synthesize_vehicle_wiki(class_name)
     except Exception:
         fallback = VEHICLE_KNOWLEDGE_BASE["car"].copy()
         fallback["cn_name"] = f"{class_name} (车辆目标)"
         fallback["en_name"] = class_name
+        fallback.setdefault("brand", "未知品牌")
+        fallback.setdefault("brand_cn", "未知品牌")
+        fallback.setdefault("model", class_name)
+        fallback.setdefault("year", "-")
+        fallback.setdefault("body_type", "car")
+        fallback.setdefault("body_type_cn", "乘用车")
         return fallback
 
 

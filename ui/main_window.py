@@ -137,7 +137,10 @@ class MediaStreamWorker(QThread):
                     rem = frame_delay - elapsed
                     if rem > 0.005:
                         time.sleep(rem)
+        except Exception as e:
+            self.error_occurred.emit(f"推流异常中断: {str(e)}")
         finally:
+            self.running = False
             cap.release()
 
     def stop(self):
@@ -334,11 +337,13 @@ class MainWindow(QMainWindow):
         res_layout = QVBoxLayout(grp_results)
         res_layout.setContentsMargins(8, 8, 8, 8)
 
-        self.table_res = QTableWidget(0, 3)
-        self.table_res.setHorizontalHeaderLabels(["车型 / 类别", "置信度", "目标定位坐标 (XYXY)"])
-        self.table_res.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.table_res = QTableWidget(0, 5)
+        self.table_res.setHorizontalHeaderLabels(["序号", "品牌", "车型 / 款式", "置信度", "目标坐标"])
+        self.table_res.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.table_res.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.table_res.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.table_res.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.table_res.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.table_res.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
         self.table_res.setMinimumHeight(120)
         self.table_res.setMaximumHeight(220)
         self.table_res.cellClicked.connect(self._on_table_cell_clicked)
@@ -490,26 +495,56 @@ class MainWindow(QMainWindow):
 
             cls_name = det["class_name"]
             wiki = get_vehicle_wiki(cls_name)
-            if cls_name.lower() in wiki['cn_name'].lower():
-                display_name = wiki['cn_name']
-            else:
-                display_name = f"{wiki['cn_name']} ({cls_name})"
-            item_name = QTableWidgetItem(display_name)
-            item_name.setData(Qt.UserRole, cls_name)
 
+            # 0. 序号列
+            item_idx = QTableWidgetItem(str(row + 1))
+            item_idx.setTextAlignment(Qt.AlignCenter)
+            item_idx.setData(Qt.UserRole, cls_name)
+
+            # 1. 品牌列
+            b_cn = wiki.get("brand_cn", "")
+            b_en = wiki.get("brand", "")
+            if b_cn and b_en and b_cn != b_en and b_cn != "通用目标":
+                brand_text = f"{b_cn} ({b_en})"
+            elif b_cn:
+                brand_text = b_cn
+            else:
+                brand_text = b_en or "-"
+            item_brand = QTableWidgetItem(brand_text)
+            item_brand.setData(Qt.UserRole, cls_name)
+
+            # 2. 车型 / 款式列
+            model_text = wiki.get("model", cls_name)
+            year_val = wiki.get("year", "-")
+            year_text = f"{year_val}款" if year_val and year_val != "-" else ""
+            body_text = wiki.get("body_type_cn", "")
+            spec_parts = [model_text]
+            if year_text:
+                spec_parts.append(year_text)
+            if body_text:
+                spec_parts.append(f"· {body_text}")
+            item_spec = QTableWidgetItem(" ".join(spec_parts))
+            item_spec.setData(Qt.UserRole, cls_name)
+
+            # 3. 置信度列
             conf_val = det["confidence"] * 100
             item_conf = QTableWidgetItem(f"{conf_val:.1f}%")
             item_conf.setTextAlignment(Qt.AlignCenter)
+            item_conf.setData(Qt.UserRole, cls_name)
             if conf_val >= 60:
                 item_conf.setForeground(Qt.cyan)
 
+            # 4. 坐标列
             box_str = f"[{det['box'][0]}, {det['box'][1]}, {det['box'][2]}, {det['box'][3]}]"
             item_box = QTableWidgetItem(box_str)
             item_box.setTextAlignment(Qt.AlignCenter)
+            item_box.setData(Qt.UserRole, cls_name)
 
-            self.table_res.setItem(row, 0, item_name)
-            self.table_res.setItem(row, 1, item_conf)
-            self.table_res.setItem(row, 2, item_box)
+            self.table_res.setItem(row, 0, item_idx)
+            self.table_res.setItem(row, 1, item_brand)
+            self.table_res.setItem(row, 2, item_spec)
+            self.table_res.setItem(row, 3, item_conf)
+            self.table_res.setItem(row, 4, item_box)
 
             if self._user_selected_cls and cls_name.lower() == self._user_selected_cls.lower():
                 user_selected_row = row
@@ -531,11 +566,12 @@ class MainWindow(QMainWindow):
             self._reset_wiki_placeholder()
 
     def _on_table_cell_clicked(self, row, col):
-        item = self.table_res.item(row, 0)
+        item = self.table_res.item(row, col) or self.table_res.item(row, 0)
         if item:
             raw_cls = item.data(Qt.UserRole)
-            self._user_selected_cls = raw_cls
-            self._show_vehicle_wiki(raw_cls, force=True)
+            if raw_cls:
+                self._user_selected_cls = raw_cls
+                self._show_vehicle_wiki(raw_cls, force=True)
 
     def _show_vehicle_wiki(self, class_name: str, force: bool = False):
         if not force and class_name == self._current_wiki_cls:
@@ -727,7 +763,8 @@ class MainWindow(QMainWindow):
                 with open(save_path, "w", newline="", encoding="utf-8-sig") as f:
                     writer = csv.writer(f)
                     writer.writerow([
-                        "序号", "类别英文", "中文名称", "置信度",
+                        "序号", "品牌", "品牌中文", "车型型号", "年代款", "车身款式",
+                        "类别英文", "中文全称", "置信度",
                         "X1", "Y1", "X2", "Y2",
                         "分类归属", "动力构型", "尺寸规格", "牌照准驾", "安全规程"
                     ])
@@ -736,6 +773,11 @@ class MainWindow(QMainWindow):
                         box = det.get("box", [0, 0, 0, 0])
                         writer.writerow([
                             idx,
+                            wiki.get("brand", "-"),
+                            wiki.get("brand_cn", "-"),
+                            wiki.get("model", "-"),
+                            wiki.get("year", "-"),
+                            wiki.get("body_type_cn", wiki.get("body_type", "-")),
                             det["class_name"],
                             wiki.get("cn_name", ""),
                             f"{det['confidence']*100:.1f}%",

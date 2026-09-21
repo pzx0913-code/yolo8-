@@ -5,9 +5,12 @@ __pycache__/
 *.so
 .pytest_cache/
 
-# 训练日志与权重缓存 (避免体积过大)
+# 训练日志与权重缓存 (避免历史仓库膨胀)
 runs/
 *.pt.cache
+weights/epoch*.pt
+weights/yolo26*.pt
+weights/best_car.pt
 
 # 数据集中的大图文件 (保留配置模板即可)
 dataset/images/

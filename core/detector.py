@@ -44,6 +44,13 @@ class VehicleDetector:
     def load_model(self, model_path: str):
         """加载或热切换模型权重，支持缺失自动补全恢复（线程安全）"""
         with self.lock:
+            # 别名容错重定向：若请求 best_car.pt 且本地不存在，但存在核心 best_qiche.pt，直接重定向
+            if not os.path.exists(model_path):
+                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                qiche_pt = os.path.join(base_dir, "weights", "best_qiche.pt")
+                if "best_car" in model_path and os.path.exists(qiche_pt):
+                    model_path = qiche_pt
+
             if not os.path.exists(model_path):
                 target_dir = os.path.dirname(os.path.abspath(model_path))
                 if target_dir:
