@@ -490,7 +490,10 @@ class MainWindow(QMainWindow):
 
             cls_name = det["class_name"]
             wiki = get_vehicle_wiki(cls_name)
-            display_name = f"{wiki['cn_name']} ({cls_name})"
+            if cls_name.lower() in wiki['cn_name'].lower():
+                display_name = wiki['cn_name']
+            else:
+                display_name = f"{wiki['cn_name']} ({cls_name})"
             item_name = QTableWidgetItem(display_name)
             item_name.setData(Qt.UserRole, cls_name)
 
