@@ -17,7 +17,7 @@ from ultralytics import YOLO
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 
-def train(data_yaml="dataset/data.yaml", epochs=50, batch_size=16, base_model="weights/yolov8n.pt"):
+def train(data_yaml="dataset/data.yaml", epochs=50, batch_size=16, base_model="weights/yolov8n.pt", resume=False):
     print("=" * 60)
     print("[*] 启动 YOLO 车辆目标检测模型训练流程")
     print("=" * 60)
@@ -47,19 +47,24 @@ def train(data_yaml="dataset/data.yaml", epochs=50, batch_size=16, base_model="w
 
     # 4. 开始训练 (Windows 下限制 worker 数量避免共享内存与死锁异常)
     num_workers = min(2, os.cpu_count() or 1) if os.name == "nt" else min(4, os.cpu_count() or 1)
-    print(f"[*] 训练参数: epochs={epochs}, batch={batch_size}, imgsz=640, device={device}, workers={num_workers}")
-    results = model.train(
-        data=data_yaml,
-        epochs=epochs,
-        batch=batch_size,
-        imgsz=640,
-        device=device,
-        workers=num_workers,
-        project="runs/detect",
-        name="qiche_train",
-        exist_ok=True,
-        plots=True
-    )
+    
+    if resume or (base_model and "last.pt" in str(base_model)):
+        print(f"[*] 启用断点续训模式，自上次检查点恢复训练...")
+        results = model.train(resume=True)
+    else:
+        print(f"[*] 训练参数: epochs={epochs}, batch={batch_size}, imgsz=640, device={device}, workers={num_workers}")
+        results = model.train(
+            data=data_yaml,
+            epochs=epochs,
+            batch=batch_size,
+            imgsz=640,
+            device=device,
+            workers=num_workers,
+            project="runs/detect",
+            name="qiche_train",
+            exist_ok=True,
+            plots=True
+        )
 
     # 5. 自动提取最佳权重至 weights/ 目录
     save_dir = getattr(results, "save_dir", None)
@@ -102,12 +107,14 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=50, help="训练轮数 (推荐 50~100)")
     parser.add_argument("--batch", type=int, default=16, help="Batch Size (推荐 16 或 32)")
     parser.add_argument("--model", type=str, default="weights/yolov8n.pt", help="初始底模权重")
+    parser.add_argument("--resume", action="store_true", help="是否从断点权重继续训练")
     args = parser.parse_args()
 
     ok = train(
         data_yaml=args.data,
         epochs=args.epochs,
         batch_size=args.batch,
-        base_model=args.model
+        base_model=args.model,
+        resume=args.resume
     )
     sys.exit(0 if ok else 1)
