@@ -51,24 +51,27 @@ def train(data_yaml="dataset/data.yaml", epochs=50, batch_size=16, base_model="w
     if resume or (base_model and "last.pt" in str(base_model)):
         print(f"[*] 启用断点续训模式，自上次检查点恢复训练...")
         try:
-            target_epochs = max(epochs, 50)
             ckpt_data = torch.load(base_model, map_location="cpu", weights_only=False)
+            ckpt_cur_epoch = ckpt_data.get("epoch", -1) + 1
+            ckpt_orig_epochs = ckpt_data.get("train_args", {}).get("epochs", 0)
+            target_epochs = epochs if epochs > ckpt_cur_epoch else max(ckpt_orig_epochs, ckpt_cur_epoch + 1)
+
             ckpt_data.setdefault("train_args", {})["optimizer"] = "AdamW"
-            if ckpt_data.get("train_args", {}).get("epochs", 0) < target_epochs:
-                ckpt_data["train_args"]["epochs"] = target_epochs
+            ckpt_data["train_args"]["epochs"] = target_epochs
             torch.save(ckpt_data, base_model)
+
             args_yaml_path = os.path.join(os.path.dirname(os.path.dirname(base_model)), "args.yaml")
             if os.path.exists(args_yaml_path):
                 import yaml
                 with open(args_yaml_path, "r", encoding="utf-8") as yf:
-                    y_cfg = yaml.safe_load(yf)
+                    y_cfg = yaml.safe_load(yf) or {}
                 y_cfg["optimizer"] = "AdamW"
-                if y_cfg.get("epochs", 0) < target_epochs:
-                    y_cfg["epochs"] = target_epochs
+                y_cfg["epochs"] = target_epochs
                 with open(args_yaml_path, "w", encoding="utf-8") as yf:
                     yaml.dump(y_cfg, yf)
-        except Exception:
-            pass
+            print(f"[*] 续训目标总轮数设定为: {target_epochs} 轮 (已完成: {ckpt_cur_epoch} 轮)")
+        except Exception as e:
+            print(f"[!] 检查点参数检查提示: {e}")
 
         results = model.train(resume=True)
     else:

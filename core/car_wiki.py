@@ -321,12 +321,12 @@ def parse_vehicle_class_name(class_name: str) -> dict:
     else:
         raw_no_year = clean_str
 
-    # 2. 优先匹配多词复合品牌，再匹配单词品牌 (长词优先)
+    # 2. 优先匹配多词复合品牌，再匹配单词品牌 (长词优先，双向支持短横线与空格互通)
     brand = ""
-    brand_keys = sorted(BRAND_KNOWLEDGE.keys(), key=lambda x: len(x.split()), reverse=True)
+    brand_keys = sorted(BRAND_KNOWLEDGE.keys(), key=lambda x: len(re.sub(r"[-_]+", " ", x).split()), reverse=True)
     for b_key in brand_keys:
-        # 使用不区分大小写的单词边界匹配
-        pattern = r"(?i)\b" + re.escape(b_key) + r"\b"
+        b_key_norm = re.sub(r"[-_]+", " ", b_key).strip()
+        pattern = r"(?i)\b" + re.escape(b_key_norm) + r"\b"
         if re.search(pattern, raw_no_year):
             brand = b_key
             raw_no_brand = re.sub(pattern, "", raw_no_year, count=1).strip()
@@ -360,6 +360,39 @@ def parse_vehicle_class_name(class_name: str) -> dict:
     model = re.sub(r"\s+", " ", raw_no_body).strip()
     if not model:
         model = brand
+
+    # 5. 若未显式标注车身形态，进行智能语义推断，杜绝跑车/皮卡/SUV盲目兜底为三厢轿车
+    if not body_type:
+        supercar_brands = {"Ferrari", "Lamborghini", "Bugatti", "McLaren", "Spyker"}
+        coupe_keywords = [
+            "corvette", "viper", "gt-r", "gtr", "r8", "sls", "gallardo", "murcielago", "aventador",
+            "huracan", "458", "488", "f12", "superleggera", "veyron", "chiron", "carrera", "boxster",
+            "cayman", "911", "camaro", "mustang", "challenger", "tt", "tts", "z4", "370z", "350z",
+            "brz", "gt86", "miata", "mx-5", "panamera", "gt", "slk", "sl-class", "cl-class"
+        ]
+        suv_keywords = [
+            "wrangler", "cherokee", "land cruiser", "prado", "patrol", "explorer", "suburban", "tahoe",
+            "escalade", "range rover", "discovery", "defender", "rav4", "cr-v", "crv", "highlander",
+            "touareg", "tiguan", "cayenne", "macan", "x5", "x6", "x3", "x7", "q7", "q5", "q3",
+            "gle", "gls", "glc", "g-class", "g-wagon", "outback", "forester", "sequoia", "expedition"
+        ]
+        pickup_keywords = [
+            "f-150", "f-250", "f-350", "f 150", "f 250", "silverado", "sierra", "ram", "tundra",
+            "tacoma", "hilux", "ranger", "colorado", "canyon", "d-max"
+        ]
+        van_keywords = ["savana", "express", "transit", "sprinter", "e-series", "e150", "e250", "caravan", "sienna", "odyssey"]
+
+        lower_check = f"{model} {clean_str}".lower()
+        if brand in supercar_brands or any(k in lower_check for k in coupe_keywords):
+            body_type = "Coupe"
+        elif any(k in lower_check for k in suv_keywords):
+            body_type = "SUV"
+        elif any(k in lower_check for k in pickup_keywords):
+            body_type = "Cab"
+        elif any(k in lower_check for k in van_keywords):
+            body_type = "Van"
+        else:
+            body_type = "Sedan"
 
     brand_info = BRAND_KNOWLEDGE.get(brand)
     if not brand_info:

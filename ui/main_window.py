@@ -454,6 +454,7 @@ class MainWindow(QMainWindow):
     def _process_single_image(self, file_path: str, conf: float = None):
         self._stop_stream_if_running()
         self.current_raw_img_path = file_path
+        self._user_selected_cls = None
 
         if conf is None:
             conf = self.slider_conf.value() / 100.0
@@ -481,24 +482,35 @@ class MainWindow(QMainWindow):
         self.lbl_display.set_display_pixmap(pixmap)
 
     def _update_results_table(self, detections: list):
-        self.table_res.setRowCount(0)
-        vehicle_row_to_focus = None
-        user_selected_row = None
+        if not detections:
+            self.table_res.setRowCount(0)
+            if not self.current_stream_type:
+                self._reset_wiki_placeholder()
+            return
 
         vehicle_priority_classes = [
             "qiche", "car", "suv", "bus", "truck", "motorcycle", "van", "mpv",
             "sports car", "pickup", "bicycle", "traffic light", "stop sign"
         ]
 
-        for row, det in enumerate(detections):
-            self.table_res.insertRow(row)
+        target_count = len(detections)
+        if self.table_res.rowCount() != target_count:
+            self.table_res.setRowCount(target_count)
 
+        vehicle_row_to_focus = None
+        user_selected_row = None
+
+        for row, det in enumerate(detections):
             cls_name = det["class_name"]
             wiki = get_vehicle_wiki(cls_name)
 
             # 0. 序号列
-            item_idx = QTableWidgetItem(str(row + 1))
-            item_idx.setTextAlignment(Qt.AlignCenter)
+            item_idx = self.table_res.item(row, 0)
+            if item_idx is None:
+                item_idx = QTableWidgetItem()
+                item_idx.setTextAlignment(Qt.AlignCenter)
+                self.table_res.setItem(row, 0, item_idx)
+            item_idx.setText(str(row + 1))
             item_idx.setData(Qt.UserRole, cls_name)
 
             # 1. 品牌列
@@ -510,7 +522,12 @@ class MainWindow(QMainWindow):
                 brand_text = b_cn
             else:
                 brand_text = b_en or "-"
-            item_brand = QTableWidgetItem(brand_text)
+            item_brand = self.table_res.item(row, 1)
+            if item_brand is None:
+                item_brand = QTableWidgetItem()
+                self.table_res.setItem(row, 1, item_brand)
+            if item_brand.text() != brand_text:
+                item_brand.setText(brand_text)
             item_brand.setData(Qt.UserRole, cls_name)
 
             # 2. 车型 / 款式列
@@ -523,28 +540,41 @@ class MainWindow(QMainWindow):
                 spec_parts.append(year_text)
             if body_text:
                 spec_parts.append(f"· {body_text}")
-            item_spec = QTableWidgetItem(" ".join(spec_parts))
+            spec_str = " ".join(spec_parts)
+            item_spec = self.table_res.item(row, 2)
+            if item_spec is None:
+                item_spec = QTableWidgetItem()
+                self.table_res.setItem(row, 2, item_spec)
+            if item_spec.text() != spec_str:
+                item_spec.setText(spec_str)
             item_spec.setData(Qt.UserRole, cls_name)
 
             # 3. 置信度列
             conf_val = det["confidence"] * 100
-            item_conf = QTableWidgetItem(f"{conf_val:.1f}%")
-            item_conf.setTextAlignment(Qt.AlignCenter)
+            conf_str = f"{conf_val:.1f}%"
+            item_conf = self.table_res.item(row, 3)
+            if item_conf is None:
+                item_conf = QTableWidgetItem()
+                item_conf.setTextAlignment(Qt.AlignCenter)
+                self.table_res.setItem(row, 3, item_conf)
+            if item_conf.text() != conf_str:
+                item_conf.setText(conf_str)
             item_conf.setData(Qt.UserRole, cls_name)
             if conf_val >= 60:
                 item_conf.setForeground(Qt.cyan)
+            else:
+                item_conf.setForeground(Qt.white)
 
             # 4. 坐标列
             box_str = f"[{det['box'][0]}, {det['box'][1]}, {det['box'][2]}, {det['box'][3]}]"
-            item_box = QTableWidgetItem(box_str)
-            item_box.setTextAlignment(Qt.AlignCenter)
+            item_box = self.table_res.item(row, 4)
+            if item_box is None:
+                item_box = QTableWidgetItem()
+                item_box.setTextAlignment(Qt.AlignCenter)
+                self.table_res.setItem(row, 4, item_box)
+            if item_box.text() != box_str:
+                item_box.setText(box_str)
             item_box.setData(Qt.UserRole, cls_name)
-
-            self.table_res.setItem(row, 0, item_idx)
-            self.table_res.setItem(row, 1, item_brand)
-            self.table_res.setItem(row, 2, item_spec)
-            self.table_res.setItem(row, 3, item_conf)
-            self.table_res.setItem(row, 4, item_box)
 
             if self._user_selected_cls and cls_name.lower() == self._user_selected_cls.lower():
                 user_selected_row = row
@@ -552,18 +582,21 @@ class MainWindow(QMainWindow):
             if vehicle_row_to_focus is None and cls_name.lower() in vehicle_priority_classes:
                 vehicle_row_to_focus = row
 
-        if len(detections) > 0:
-            if user_selected_row is not None:
-                target_row = user_selected_row
-            elif vehicle_row_to_focus is not None:
-                target_row = vehicle_row_to_focus
-            else:
-                target_row = 0
-            self.table_res.selectRow(target_row)
-            selected_cls = self.table_res.item(target_row, 0).data(Qt.UserRole)
-            self._show_vehicle_wiki(selected_cls)
+        if user_selected_row is not None:
+            target_row = user_selected_row
+        elif vehicle_row_to_focus is not None:
+            target_row = vehicle_row_to_focus
         else:
-            self._reset_wiki_placeholder()
+            target_row = 0
+
+        if self.table_res.currentRow() != target_row:
+            self.table_res.blockSignals(True)
+            self.table_res.selectRow(target_row)
+            self.table_res.blockSignals(False)
+
+        selected_cls = self.table_res.item(target_row, 0).data(Qt.UserRole)
+        wiki_cls = self._user_selected_cls if (self._user_selected_cls and user_selected_row is not None) else selected_cls
+        self._show_vehicle_wiki(wiki_cls)
 
     def _on_table_cell_clicked(self, row, col):
         item = self.table_res.item(row, col) or self.table_res.item(row, 0)
