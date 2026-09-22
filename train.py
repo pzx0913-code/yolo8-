@@ -98,11 +98,24 @@ def train(data_yaml="dataset/data.yaml", epochs=50, batch_size=16, base_model="w
         print("[!] 提示: 未检测到可用 GPU，将使用 CPU 模式进行训练")
 
     # 3. 加载基底权重并构建网络计算图
+    if resume and (not base_model or "last.pt" not in str(base_model)):
+        last_candidates = [
+            os.path.join("runs", "detect", "runs", "detect", "qiche_train", "weights", "last.pt"),
+            os.path.join("runs", "detect", "qiche_train", "weights", "last.pt"),
+            os.path.join("runs", "detect", "train", "weights", "last.pt"),
+            os.path.join("weights", "last.pt"),
+        ]
+        for cand in last_candidates:
+            if os.path.exists(cand):
+                base_model = cand
+                print(f"[*] 自动定位到最近训练断点权重: {base_model}")
+                break
+
     if not os.path.exists(base_model):
         print(f"[*] 基底模型 {base_model} 不存在，将自动准备预训练底模...")
         base_model = "yolov8n.pt"
 
-    print(f"[*] 加载基底模型: {base_model}")
+    print(f"[*] 加载模型权重: {base_model}")
     model = YOLO(base_model)
 
     # 4. 并发管道配置 (Windows 下限制 DataLoader 进程数以规避共享内存死锁)
