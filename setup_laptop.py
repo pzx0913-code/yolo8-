@@ -1,7 +1,23 @@
 # -*- coding: utf-8 -*-
 """
-YOLO 车辆识别与车型检测系统 - 笔记本/新设备环境一键自动安装配置脚本
-通过 Python 原生执行环境创建与依赖安装，彻底避免 Windows CMD 编码乱码与语法截断问题。
+深度学习工程虚拟环境自动化隔离构建与依赖分发向导 (setup_laptop.py)
+=============================================================================
+[理论背景与学术原理阐述 (Academic & Theoretical Foundations)]:
+
+一、 PEP 405 运行时虚拟环境隔离机制 (Runtime Virtual Environment Isolation)
+    - 深度学习项目对底层 C/C++ 动态链接库 (如 PyTorch 的 libtorch_cuda.dll、CUDA Runtime、
+      cuDNN) 与特定 Python ABI (Application Binary Interface) 具有严格的版本绑定要求；
+    - 直接在全局系统 Python 环境中安装依赖极易诱发 "依赖地狱 (Dependency Hell)" 与符号版本冲突；
+    - 本脚本基于 Python 官方标准 PEP 405 实现轻量化沙盒隔离，通过在项目根目录下构建独立
+      的 sys.prefix、独立 site-packages 目录及专属 Scripts/bin 启动器，达成项目运行环境的
+      自包含性 (Self-Containment) 与可移植性 (Portability)。
+
+二、 PyPI 预编译轮子分发 (Pre-built Wheel Distributions) 与镜像容灾流
+    - 深度学习依赖包 (torch, torchvision, opencv-python) 包含大量 C++ 与 CUDA 扩展源码，
+      在缺少本地 MSVC C++ 构建工具链的机器上无法通过源码包 (sdist) 编译；
+    - 本脚本设计了自动化探测机制: 优先自清华/阿里云国内镜像源加速下载预编译二进制 Wheel 包，
+      当网络受阻或不可达时自动降级容灾，确保新设备开箱即用、一键就绪。
+=============================================================================
 """
 import os
 import sys

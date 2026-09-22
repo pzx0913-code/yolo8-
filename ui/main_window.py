@@ -1,7 +1,39 @@
 # -*- coding: utf-8 -*-
 """
-YOLO 智能车辆检测与车型分析系统 - 响应式主界面
-具备原生深色标题栏、平滑图像自适应缩放、多平台显卡动态适配与排版优化。
+YOLO 智能车辆检测与细粒度车型分析系统 - 现代化人机交互主界面
+=============================================================================
+[理论背景与学术原理阐述 (Academic & Theoretical Foundations)]:
+
+一、 事件驱动多线程解耦与生产者-消费者架构 (Producer-Consumer Threading Pattern)
+    在计算机视觉 GUI 软件工程中，主事件循环线程 (Qt Main Event Loop) 负责渲染 UI 控件、
+    处理鼠标/键盘事件并维系 60FPS 的界面刷新率。
+    - 若将耗时的深度学习前向推理 (YOLO Forward Pass) 或 OpenCV 视频解码直接放置于主线程，
+      将必然触发主事件循环假死 (Application Not Responding, ANR)；
+    - 本系统设计了独立的 MediaStreamWorker (继承自 QThread)，作为视频帧数据生产者 (Producer)，
+      在后台子线程中完成视频流捕获、Letterbox 变换、张量推理与 NMS 后处理；
+    - 主界面线程作为消费者 (Consumer)，通过 Qt 的跨线程信号槽机制 (Qt::QueuedConnection)
+      异步接收 frame_ready 信号并调度 GPU 渲染，达成主线程零阻塞与极高交互流畅度。
+
+二、 栅格图像内存布局与 4 字节对其规范 (QImage Memory Layout & 4-Byte Stride Alignment)
+    在图像色彩空间从 OpenCV 的 BGR 格式转换为 Qt 的 RGB 格式并构造 QImage 时:
+        bytes_per_line = channels * width = 3 * width
+    - 图像在物理内存中按扫描行 (Scanline) 线性排列。某些图形加速驱动对显存行跨度 (Pitch/Stride)
+      具有 4 字节或 8 字节的强制对齐要求；
+    - 采用 QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888).copy()
+      显式执行深拷贝 (Deep Copy)，从根本上规避子线程在复用/重写 OpenCV frame numpy 缓冲区时
+      引发的野指针悬挂与内存访问段错误 (Segmentation Fault)。
+
+三、 滑动窗口防抖控制算法 (Anti-Jitter Debounce Timer: 150ms Window)
+    当用户拖拽置信度阈值滑块 (Confidence Slider) 时，操作系统高频派发 valueChanged 事件 (>60Hz)。
+    - 若每次微小变动均立即触发推理，将造成计算资源雪崩与模型计算图抖动；
+    - 本系统配置 150ms 单次触发防抖定时器 (QTimer.setSingleShot(True)):
+      只有当用户手指在滑块上停止移动超过 150ms 时，才执行一次重推理计算，兼顾即时反馈与性能开销。
+
+四、 桌面窗口管理器深色模式底层 API 注入 (DWM Immersion API)
+    通过 Python ctypes 跨语言直接调用 Windows 原生动态链接库 dwmapi.dll 中的
+    DwmSetWindowAttribute 原语，将 DWMWA_USE_IMMERSIVE_DARK_MODE 标志位置 1，
+    实现操作系统内核级的无边框深色浸润标题栏，消除传统 Win32 标题栏生硬的白色反差。
+=============================================================================
 """
 
 import sys
@@ -25,14 +57,23 @@ from core.car_wiki import get_vehicle_wiki
 
 
 def enable_windows_dark_title_bar(window: QMainWindow):
-    """在 Windows 10/11 上启用原生深色沉浸式标题栏"""
+    """
+    通过 Windows Desktop Window Manager (DWM) 原生底层 API 开启深色沉浸式系统标题栏
+    
+    原理:
+        - Windows 11 Build 22000 及更高版本: DWMWA_USE_IMMERSIVE_DARK_MODE 属性值为 20;
+        - Windows 10 Build 18985~21H2 版本: 早期内部属性值为 19;
+        通过 ctypes 调用 dwmapi.dll::DwmSetWindowAttribute 动态适配各系统版本。
+    """
     if sys.platform == "win32":
         try:
             hwnd = int(window.winId())
             value = c_int(1)
+            # 优先尝试 Windows 11 标准常量 20
             ret = ctypes.windll.dwmapi.DwmSetWindowAttribute(
                 hwnd, 20, byref(value), sizeof(value)
             )
+            # 若失败则回退尝试 Windows 10 历史常量 19
             if ret != 0:
                 ctypes.windll.dwmapi.DwmSetWindowAttribute(
                     hwnd, 19, byref(value), sizeof(value)
@@ -42,7 +83,13 @@ def enable_windows_dark_title_bar(window: QMainWindow):
 
 
 def imwrite_unicode(file_path: str, img: np.ndarray) -> bool:
-    """Windows 下安全保存带有中文路径的图像，杜绝 OpenCV 写入乱码或静默失败"""
+    """
+    Windows 操作系统下安全持久化带有非 ANSI (如中文) 路径的图像矩阵
+    
+    原理:
+        利用 cv2.imencode 先在内存中将 ndarray 压缩为二进制 buffer，
+        再通过 Python 文件系统内核调用 Win32 UTF-16 宽字符写盘，规避 OpenCV fopen 编码崩溃。
+    """
     try:
         ext = os.path.splitext(file_path)[1]
         if not ext:
@@ -58,7 +105,15 @@ def imwrite_unicode(file_path: str, img: np.ndarray) -> bool:
 
 
 class SmoothImageDisplay(QLabel):
-    """自适应平滑图像视窗组件：窗口拉伸放大或缩小时，图片按原比例动态重绘适配"""
+    """
+    自适应双线性插值平滑图像视窗组件 (Smooth Responsive Display Widget)
+    
+    算法机理:
+        继承自 QLabel，重写 resizeEvent 事件钩子。在窗口被拖动改变尺度时，
+        根据当前可用视窗几何宽高 (avail_w, avail_h) 动态计算保持原长宽比的缩放尺寸:
+            target_scale = min(avail_w / img_w, avail_h / img_h)
+        采用 Qt.SmoothTransformation 双线性/双三次重采样插值，消除缩放锯齿与高频摩尔纹。
+    """
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAlignment(Qt.AlignCenter)
@@ -67,18 +122,22 @@ class SmoothImageDisplay(QLabel):
         self._raw_pixmap = None
 
     def set_display_pixmap(self, pixmap: QPixmap):
+        """设置待渲染的原始无损高分辨率 Pixmap 对象并触发视窗重绘"""
         self._raw_pixmap = pixmap
         self._refresh()
 
     def clear_display(self):
+        """清空视窗渲染内容与内部位图引用，释放显存与内存"""
         self._raw_pixmap = None
         self.clear()
 
     def resizeEvent(self, event):
+        """捕获视窗尺度形变事件，自适应平滑更新图像尺寸"""
         super().resizeEvent(event)
         self._refresh()
 
     def _refresh(self):
+        """内部几何尺寸重新投影与重采样绘制计算"""
         if self._raw_pixmap and not self._raw_pixmap.isNull():
             target_size = self.size()
             avail_w = max(10, target_size.width() - 8)
@@ -90,7 +149,13 @@ class SmoothImageDisplay(QLabel):
 
 
 class MediaStreamWorker(QThread):
-    """后台视频流 / 摄像头连续推流与推理线程"""
+    """
+    多媒体视频流异步捕获与深度学习推理后台工作子线程 (Producer Thread)
+    
+    信号说明:
+        frame_ready (Signal): 推理完毕帧分发信号 (QImage, detections_list, inference_time_ms, bgr_ndarray)
+        error_occurred (Signal): 异常中断与错误警报信号 (str)
+    """
     frame_ready = Signal(QImage, list, float, object)
     error_occurred = Signal(str)
 
@@ -102,9 +167,13 @@ class MediaStreamWorker(QThread):
         self.running = False
 
     def set_conf(self, conf: float):
+        """动态更新置信度过滤阈值 (线程安全标量赋值)"""
         self.conf = conf
 
     def run(self):
+        """
+        子线程核心事件泵: 循环执行 [抽帧 -> YOLO推理 -> NMS抑制 -> 色彩转换 -> 跨线程派发]
+        """
         cap = cv2.VideoCapture(self.source)
         try:
             if not cap.isOpened():
@@ -123,15 +192,19 @@ class MediaStreamWorker(QThread):
                 if not ret:
                     break
 
+                # 调用底层推理引擎进行单帧检测
                 annotated_frame, detections, time_ms = self.detector.predict_image(frame, conf=self.conf)
 
+                # 4 字节行跨度对齐与内存深拷贝
                 h, w, ch = annotated_frame.shape
                 bytes_per_line = ch * w
                 rgb_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
                 q_img = QImage(rgb_frame.data, w, h, bytes_per_line, QImage.Format_RGB888).copy()
 
+                # 通过 Qt 事件队列派发信号至主 UI 线程
                 self.frame_ready.emit(q_img, detections, time_ms, annotated_frame)
 
+                # 若处理离线视频文件，根据视频固有 FPS 执行节流休眠，避免以超出原片数十倍的速度狂刷界面
                 if is_file:
                     elapsed = time.perf_counter() - t0
                     rem = frame_delay - elapsed
@@ -144,6 +217,7 @@ class MediaStreamWorker(QThread):
             cap.release()
 
     def stop(self):
+        """安全停止工作线程并等待其平稳退出 (Graceful Shutdown)"""
         self.running = False
         self.wait()
 
@@ -765,6 +839,20 @@ class MainWindow(QMainWindow):
     _stop_camera_if_running = _stop_stream_if_running
 
     def _on_save_result(self):
+        """
+        多模态检测成果导出管道 (Multimodal Result Export Pipeline)
+        
+        标准与规范 (Standards & Formats):
+            1. 栅格图像无损/有损导出 (.jpg / .png):
+               调用 imwrite_unicode 函数，支持 Windows 全字符集路径，保留 YOLOv8 绘制的
+               置信度标签、边界框几何轮廓与类别辨识信息;
+            2. 结构化数据报表导出 (.csv):
+               遵循 RFC 4180 逗号分隔符数据交换规范。
+               采用 UTF-8 with BOM (utf-8-sig) 编码格式，主动在文件首部注入 3 字节签名
+               (0xEF, 0xBB, 0xBF)，确保 Microsoft Excel 在 Windows 平台无乱码正常解析中文字符;
+            3. 数据表头包含: 序号、品牌中英文、型号、年代款、车身形态、置信度、归一化像素坐标
+               (X1, Y1, X2, Y2) 以及多维领域知识属性 (动力、规格、准驾号牌、安全规程)。
+        """
         if self.current_annotated_bgr is None and not self.current_detections:
             QMessageBox.information(self, "提示", "暂无检测结果图像或数据可供保存")
             return

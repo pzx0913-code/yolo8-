@@ -1,14 +1,31 @@
 # -*- coding: utf-8 -*-
 """
-YOLO 汽车与车辆识别软件 - 桌面客户端启动入口
-内置全自动环境诊断、崩溃捕获与原生弹窗引导机制。
+YOLO 汽车与车辆识别软件 - 桌面客户端启动入口 (Application Bootstrap Entry)
+
+【答辩与学术论文架构设计原理说明】：
+1. 软件工程生命周期设计模式 (Bootstrap Pattern):
+   本模块作为整个系统的启动门面（Facade），将复杂的环境诊断、高分屏渲染策略配置、
+   AI 引擎预热和主界面实例化进行了高度解耦与顺序流水线化管理。
+
+2. 容错性与异常安全防御机制 (Fault Tolerance & Fail-safe Strategy):
+   - 传统 Python GUI 软件在缺少依赖库（如 PySide6 或 PyTorch）时，控制台直接闪退且无任何交互反馈，
+     导致用户或评审人员产生“程序无法运行”的误解。
+   - 本模块采用双层保护机制：外层通过纯 Python 内置的 ctypes 直接调用 Windows 底层 Win32 API
+     (user32.dll: MessageBoxW)，即使在整个 Qt 图形框架与 PyTorch 深度学习库彻底崩溃或未安装的极端场景下，
+     依然能强行拉起 Windows 操作系统原生错误交互弹窗，并自动生成结构化崩溃日志 (crash_log.txt)，
+     符合软件系统可用性（Availability）与可维护性（Maintainability）的工业级标准。
+
+3. 消除感知延迟的启动加载器 (SplashScreen Anti-Perception-Lag):
+   深度神经网络在首次加载权重至 GPU/CPU 时，需要进行 CUDA 运行时上下文初始化、权重反序列化以及
+   计算图（Computation Graph）的静态构建，通常产生 1~2 秒的“启动真空期”。
+   本系统引入 QSplashScreen 异步占位技术，在毫秒级拉起科技风启动画面，有效消除用户界面冻结感。
 """
 
 import sys
 import os
 import traceback
 
-# 锁定当前工作目录与模块导入路径
+# 锁定当前工作目录与模块导入路径 (防止相对路径寻找失效及模块导入作用域污染)
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(CURRENT_DIR)
 if CURRENT_DIR not in sys.path:
@@ -16,9 +33,20 @@ if CURRENT_DIR not in sys.path:
 
 
 def show_fatal_error_dialog(title: str, message: str, exc: BaseException = None):
-    """即使在 GUI 依赖完全缺失的情况下，也能弹出 Windows 原生错误弹窗"""
+    """
+    基于底层操作系统 API 的崩溃诊断与原生弹窗处理器
+    
+    【学术与答辩原理解析】：
+    - 运行原理：通过 ctypes 模块实现 C 语言级别的动态库链接，直接装载 'user32.dll' 并调用 'MessageBoxW'。
+    - 优势：完全绕过 Python 虚拟环境中的任何第三方库，具备最高等级的调用优先级与独立性。
+    - 参数说明：
+      * title: 弹窗标题 (Unicode 宽字符)
+      * message: 面向用户的引导式排错文案
+      * exc: 异常基类对象，通过 traceback.print_exception 提取完整栈帧并落盘
+    """
     print(f"\n[FATAL ERROR] {title}\n{message}\n", file=sys.stderr)
     try:
+        # 将结构化的调用栈写入本地日志，用于事故回溯与排障审计
         with open(os.path.join(CURRENT_DIR, "crash_log.txt"), "w", encoding="utf-8") as f:
             f.write(f"Title: {title}\n")
             f.write(f"Message:\n{message}\n\n")
@@ -33,6 +61,7 @@ def show_fatal_error_dialog(title: str, message: str, exc: BaseException = None)
     if sys.platform == "win32":
         try:
             import ctypes
+            # 0x10 代表 MB_ICONERROR (错误红叉图标)，0x0 代表 MB_OK (单确定按钮)
             ctypes.windll.user32.MessageBoxW(
                 0,
                 f"{message}\n\n详细排查日志已生成至:\ncrash_log.txt",
@@ -44,6 +73,10 @@ def show_fatal_error_dialog(title: str, message: str, exc: BaseException = None)
 
 
 def main():
+    """
+    应用程序主函数：环境巡检 -> 高分屏配置 -> 启动动画 -> 核心视觉预热 -> 事件循环
+    """
+    # 阶段一：GUI 基础框架依赖自检
     try:
         from PySide6.QtWidgets import QApplication, QSplashScreen
         from PySide6.QtCore import Qt
@@ -60,7 +93,9 @@ def main():
         )
         sys.exit(1)
 
-    # 启用高分屏清晰渲染
+    # 阶段二：高分辨率屏幕渲染策略配置 (High-DPI Scaling Policy)
+    # 【原理说明】：在 2K/4K 笔记本或缩放比例为 125%/150%/175% 的屏幕上，默认整数缩放会导致字体发虚或控件变形。
+    # 设置 PassThrough 原生透传策略，交由 Qt 底层矢量引擎依据设备像素比（DPR, Device Pixel Ratio）精确渲染。
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
@@ -69,7 +104,9 @@ def main():
     app.setApplicationName("YOLO 智能车辆检测分析系统")
     app.setOrganizationName("VehicleAI")
 
-    # 立即弹出轻量启动画面，消除用户等待时的界面真空感
+    # 阶段三：异步启动加载器 (QSplashScreen)
+    # 【原理说明】：利用双缓冲绘图机制 (QPainter) 在内存离屏画布 (QPixmap) 绘制深色科技风加载窗，
+    # 并置顶展示 (WindowStaysOnTopHint)。
     splash_pix = QPixmap(440, 200)
     splash_pix.fill(QColor('#0F172A'))
     p = QPainter(splash_pix)
@@ -90,8 +127,10 @@ def main():
 
     splash = QSplashScreen(splash_pix, Qt.WindowStaysOnTopHint)
     splash.show()
+    # 强制分发并处理当前消息队列中的重绘事件，确保启动窗口瞬间呈现在桌面
     app.processEvents()
 
+    # 阶段四：AI 深度学习核心依赖与硬件运行时探测
     try:
         import torch
         import ultralytics
@@ -107,13 +146,18 @@ def main():
         )
         sys.exit(1)
 
+    # 阶段五：实例化主窗口并交付事件循环
     try:
         from ui.main_window import MainWindow
 
+        # 主窗体实例化（包含 UI 布局、信号槽绑定与模型就绪检测）
         window = MainWindow()
         window.show()
+        # 平滑关闭启动页并将焦点转交主窗体
         splash.finish(window)
 
+        # 【核心原理】：进入 Qt 主事件循环 (Event Loop)
+        # 底层基于 Windows 消息泵 (GetMessage/DispatchMessage)，以非阻塞事件驱动机制监听鼠标、键盘及后台线程信号
         sys.exit(app.exec())
 
     except Exception as e:
